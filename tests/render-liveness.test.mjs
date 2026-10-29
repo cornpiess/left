@@ -55,7 +55,8 @@ test('a progressive image can satisfy first paint and its cached preview survive
   assert.match(swift, /previewCache\.setObject\(image/);
   assert.match(swift, /callback\(preview, true, false\)/);
   assert.match(swiftView, /if !self\.hasReportedImage[\s\S]{0,150}self\.onLoad/);
-  assert.match(swiftView, /self\.failedAttempts <= 2/);
+  assert.match(swiftView, /failedAttempts <= 2/);
+  assert.match(swiftView, /failOrRetry\("asset-unavailable"/);
 });
 
 // ---- Scroll liveness failsafe ----

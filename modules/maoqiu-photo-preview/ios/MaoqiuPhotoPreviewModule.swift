@@ -127,6 +127,18 @@ final class MaoqiuPhotoPreviewView: ExpoView {
     if let token { PhotoResources.shared.cancel(token) }
     token = nil
   }
+  private func failOrRetry(_ reason: String, version: Int) {
+    failedAttempts += 1
+    if failedAttempts <= 2 {
+      let delay = failedAttempts == 1 ? 1.0 : 4.0
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+        guard let self, self.generation == version, self.window != nil, !self.hasFinalImage else { return }
+        self.requestedSize = .zero; self.setNeedsLayout()
+      }
+    } else if imageView.image == nil {
+      onError(["reason": reason])
+    }
+  }
   override func didMoveToWindow() {
     super.didMoveToWindow()
     if window == nil { cancel(); requestedSize = .zero; imageView.image = nil; hasFinalImage = false; hasReportedImage = false }
@@ -142,7 +154,7 @@ final class MaoqiuPhotoPreviewView: ExpoView {
     let version = generation
     guard let asset = PhotoResources.fetchAssets([assetId]).firstObject else {
       PhotoResources.shared.recordMissingAsset()
-      onError(["reason": "asset-unavailable"]); return
+      failOrRetry("asset-unavailable", version: version); return
     }
     token = PhotoResources.shared.request(asset, size: size, priority: requestPriority, allowNetwork: networkAccess) { [weak self] image, degraded, wasCancelled in
       guard let self, self.generation == version, self.window != nil else { return }
@@ -171,16 +183,7 @@ final class MaoqiuPhotoPreviewView: ExpoView {
       } else if !degraded {
         // Keep any low-resolution preview visible and retry transient PhotoKit
         // or iCloud failures a bounded number of times without user action.
-        self.failedAttempts += 1
-        if self.failedAttempts <= 2 {
-          let delay = self.failedAttempts == 1 ? 1.0 : 4.0
-          DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, self.generation == version, self.window != nil, !self.hasFinalImage else { return }
-            self.requestedSize = .zero; self.setNeedsLayout()
-          }
-        } else if self.imageView.image == nil {
-          self.onError(["reason": "request-failed"])
-        }
+        self.failOrRetry("request-failed", version: version)
       }
     }
   }
