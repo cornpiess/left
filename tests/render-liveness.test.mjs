@@ -26,7 +26,7 @@ test('every scheduler drop path notifies its callbacks as cancelled', () => {
   // cancelBackground, pump eviction and window disable must all route
   // through notifyCancelled — a silent drop leaves the view black forever.
   assert.match(swift, /cancelBackground\(\)[\s\S]{0,120}notifyCancelled/);
-  assert.match(swift, /pixels > 8_000_000[\s\S]{0,80}notifyCancelled\(background\)/);
+  assert.match(swift, /running\.count >= maxRunning[\s\S]{0,150}notifyCancelled\(background\)/);
   assert.match(swift, /!enabled[\s\S]{0,400}notifyCancelled\(task\)/);
 });
 test('cancelled views re-arm instead of staying black', () => {
@@ -43,6 +43,19 @@ test('visible burst stack cards use neighbour priority', () => {
   const card = readFileSync(new URL('../src/components/MemoryCard.js', import.meta.url), 'utf8');
   assert.doesNotMatch(card, /stackCardImg.*priority=\{2\}/);
   assert.match(card, /maxPixelSize=\{512\} priority=\{1\}/);
+});
+
+test('all PhotoKit ID lookups include nonrepresentative system-burst frames', () => {
+  assert.match(swift, /options\.includeAllBurstAssets = true/);
+  assert.doesNotMatch(swiftView, /fetchAssets\(withLocalIdentifiers:.*options: nil/);
+  assert.match(swiftView, /PhotoResources\.fetchAssets\(\[assetId\]\)/);
+});
+
+test('a progressive image can satisfy first paint and its cached preview survives buffer promotion', () => {
+  assert.match(swift, /previewCache\.setObject\(image/);
+  assert.match(swift, /callback\(preview, true, false\)/);
+  assert.match(swiftView, /if !self\.hasReportedImage[\s\S]{0,150}self\.onLoad/);
+  assert.match(swiftView, /self\.failedAttempts <= 2/);
 });
 
 // ---- Scroll liveness failsafe ----

@@ -15,3 +15,33 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm test
       - run: npx expo export --platform ios
+  native-photo-policy:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compile and exercise actual Swift scheduling policy
+        run: |
+          swiftc modules/maoqiu-photo-preview/ios/PhotoRequestPolicy.swift tests/native/PhotoRequestPolicyTests.swift -o /tmp/photo-policy-tests
+          /tmp/photo-policy-tests
+      - name: Check native source syntax
+        run: xcrun swiftc -frontend -parse modules/maoqiu-photo-preview/ios/*.swift
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Select Xcode
+        run: |
+          XCODE_APP="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+      - name: Generate iOS project and install pods
+        run: |
+          npx expo prebuild --platform ios --no-install
+          cd ios && pod install
+      - name: Compile iOS simulator app without signing
+        run: |
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build

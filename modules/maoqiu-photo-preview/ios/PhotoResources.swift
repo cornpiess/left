@@ -9,18 +9,21 @@ final class PhotoResources: NSObject {
   let manager = PHCachingImageManager()
   static let contentReady = Notification.Name("MaoqiuPhotoContentReady")
   private let cache = NSCache<NSString, UIImage>()
+  private let previewCache = NSCache<NSString, UIImage>()
   private struct Task {
     let id: UUID
     let key: String
     let asset: PHAsset
     let size: CGSize
     let network: Bool
+    let sequence: UInt64
     var priority: Int
     var callbacks: [UUID: (UIImage?, Bool, Bool) -> Void]
     var request = PHInvalidImageRequestID
     var started: CFTimeInterval = 0
   }
   private var tasks: [UUID: Task] = [:]
+  private var sequence: UInt64 = 0
   private var tokens: [UUID: UUID] = [:]
   private var preheated: [(PHAsset, CGSize)] = []
   private var interactive = false
@@ -34,15 +37,20 @@ final class PhotoResources: NSObject {
   private var lastFrame: CFTimeInterval = 0
   private var frames = 0.0, slowFrames = 0.0, maxFrameMs = 0.0
   private var hits = 0.0, requests = 0.0, ready = 0.0, loadMs = 0.0, errors = 0.0, cancelled = 0.0
+  private var missingAssets = 0.0, previewImages = 0.0, cloudMisses = 0.0, lastErrorCode = 0.0, timeouts = 0.0
+  func recordMissingAsset() { missingAssets += 1 }
 
   override init() {
     super.init()
     cache.totalCostLimit = 48 * 1024 * 1024
     cache.countLimit = 24
+    previewCache.totalCostLimit = 8 * 1024 * 1024
+    previewCache.countLimit = 24
     let center = NotificationCenter.default
     observers.append(center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
       self?.pressureUntil = CACurrentMediaTime() + 30
       self?.cache.removeAllObjects()
+      self?.previewCache.removeAllObjects()
       self?.stopPreheat()
       self?.cancelBackground()
     })
@@ -54,7 +62,7 @@ final class PhotoResources: NSObject {
   private func updatePressure() {
     constrained = ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
     cache.totalCostLimit = constrained ? 16 * 1024 * 1024 : 48 * 1024 * 1024
-    if constrained { cache.removeAllObjects(); stopPreheat(); cancelBackground() }
+    if constrained { cache.removeAllObjects(); previewCache.removeAllObjects(); stopPreheat(); cancelBackground() }
     pump()
   }
   static func size(_ width: CGFloat, _ height: CGFloat, cap: CGFloat = 4096) -> CGSize {
@@ -62,6 +70,11 @@ final class PhotoResources: NSObject {
     CGSize(width: min(cap, max(64, ceil(width / 64) * 64)), height: min(cap, max(64, ceil(height / 64) * 64)))
   }
   private func key(_ id: String, _ size: CGSize) -> String { "\(id):\(Int(size.width))x\(Int(size.height))" }
+  static func fetchAssets(_ ids: [String]) -> PHFetchResult<PHAsset> {
+    let options = PHFetchOptions()
+    options.includeAllBurstAssets = true
+    return PHAsset.fetchAssets(withLocalIdentifiers: ids, options: options)
+  }
   private func options(network: Bool) -> PHImageRequestOptions {
     let o = PHImageRequestOptions()
     o.isSynchronous = false; o.resizeMode = .fast; o.deliveryMode = .opportunistic; o.isNetworkAccessAllowed = network
@@ -74,6 +87,9 @@ final class PhotoResources: NSObject {
       DispatchQueue.main.async { callback(image, false, false) }
       return token
     }
+    if let preview = previewCache.object(forKey: k as NSString) {
+      DispatchQueue.main.async { callback(preview, true, false) }
+    }
     // Neighbours (priority 1) are user-visible next; blocking iCloud for them
     // leaves blank cards on iCloud-heavy libraries until they become active.
     let network = priority <= 1 || allowNetwork
@@ -85,7 +101,8 @@ final class PhotoResources: NSObject {
       tokens[token] = id
     } else {
       let id = UUID()
-      tasks[id] = Task(id: id, key: k, asset: asset, size: size, network: network, priority: priority, callbacks: [token: callback])
+      sequence &+= 1
+      tasks[id] = Task(id: id, key: k, asset: asset, size: size, network: network, sequence: sequence, priority: priority, callbacks: [token: callback])
       tokens[token] = id
     }
     pump()
@@ -114,23 +131,27 @@ final class PhotoResources: NSObject {
   }
   private func cancelBackground() {
     // notifyCancelled mutates `tasks`, so iterate over a snapshot.
-    for task in Array(tasks.values) where task.priority > 0 { notifyCancelled(task) }
+    for task in Array(tasks.values) where task.priority >= 2 { notifyCancelled(task) }
   }
   private func pump() {
     guard enabled else { return }
     while true {
       let running = tasks.values.filter { $0.started > 0 }
       let maxRunning = limited ? 1 : 3
-      guard running.count < maxRunning else { return }
       let pixels = running.reduce(CGFloat(0)) { $0 + $1.size.width * $1.size.height }
-      if tasks.values.contains(where: { $0.started == 0 && $0.priority == 0 }),
-         let background = running.first(where: { $0.priority > 0 }), pixels > 8_000_000 {
+      let currentWaiting = tasks.values.filter { $0.started == 0 && $0.priority == 0 }.min { $0.sequence < $1.sequence }
+      if let current = currentWaiting,
+         let background = running.filter({ $0.priority > 0 }).max(by: { $0.priority < $1.priority }),
+         running.count >= maxRunning || pixels + current.size.width * current.size.height > 24_000_000 {
         notifyCancelled(background)
         continue
       }
-      let waiting = tasks.values.filter { $0.started == 0 }.sorted { $0.priority < $1.priority }
+      guard running.count < maxRunning else { return }
+      let waiting = tasks.values.filter { $0.started == 0 }.sorted {
+        $0.priority == $1.priority ? $0.sequence < $1.sequence : $0.priority < $1.priority
+      }
       guard var task = waiting.first(where: {
-        ($0.priority == 0 || (!interactive && !limited && running.count < 2)) &&
+        PhotoRequestPolicy.mayStart(priority: $0.priority, running: running.count, interactive: interactive, limited: limited) &&
         (running.isEmpty || pixels + $0.size.width * $0.size.height <= 24_000_000)
       }) else { return }
       task.started = CACurrentMediaTime()
@@ -142,11 +163,19 @@ final class PhotoResources: NSObject {
           guard let self, let current = self.tasks[id] else { return }
           let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) == true
           let cancelled = (info?[PHImageCancelledKey] as? Bool) == true
-          if image == nil && !degraded && !cancelled { self.errors += 1 }
-          if let image, !degraded {
+          if image == nil && !degraded && !cancelled {
+            self.errors += 1
+            if (info?[PHImageResultIsInCloudKey] as? Bool) == true { self.cloudMisses += 1 }
+            if let error = info?[PHImageErrorKey] as? NSError { self.lastErrorCode = Double(error.code) }
+          }
+          if let image {
             let cost = (image.cgImage?.bytesPerRow ?? Int(image.size.width * 4)) * (image.cgImage?.height ?? Int(image.size.height))
-            self.cache.setObject(image, forKey: current.key as NSString, cost: cost)
-            self.ready += 1; self.loadMs += (CACurrentMediaTime() - current.started) * 1000
+            if degraded { self.previewImages += 1; self.previewCache.setObject(image, forKey: current.key as NSString, cost: cost) }
+            else {
+              self.previewCache.removeObject(forKey: current.key as NSString)
+              self.cache.setObject(image, forKey: current.key as NSString, cost: cost)
+              self.ready += 1; self.loadMs += (CACurrentMediaTime() - current.started) * 1000
+            }
           }
           if !degraded {
             self.tasks.removeValue(forKey: id)
@@ -160,6 +189,13 @@ final class PhotoResources: NSObject {
         }
       }
       tasks[id]?.request = request
+      // A PhotoKit/iCloud request that never completes must not occupy a
+      // visible slot forever. The view re-arms and keeps any preview it has.
+      DispatchQueue.main.asyncAfter(deadline: .now() + (task.network ? 45 : 20)) { [weak self] in
+        guard let self, let current = self.tasks[id], current.started > 0 else { return }
+        self.timeouts += 1
+        self.notifyCancelled(current)
+      }
     }
   }
   private func stopPreheat() {
@@ -182,7 +218,7 @@ final class PhotoResources: NSObject {
       let scale = UIScreen.main.scale
       var remainingPixels: CGFloat = 8_000_000
       for i in 0..<min(ids.count, min(widths.count, heights.count)) {
-        guard i < 2, let asset = PHAsset.fetchAssets(withLocalIdentifiers: [ids[i]], options: nil).firstObject else { continue }
+        guard i < 2, let asset = Self.fetchAssets([ids[i]]).firstObject else { continue }
         let size = Self.size(CGFloat(widths[i]) * scale, CGFloat(heights[i]) * scale)
         guard size.width * size.height <= remainingPixels else { continue }
         remainingPixels -= size.width * size.height
@@ -218,9 +254,10 @@ final class PhotoResources: NSObject {
     sampledPeakMiB = max(sampledPeakMiB, resident)
     let result = ["frames": frames, "slowFrames": slowFrames, "maxFrameMs": maxFrameMs, "residentMiB": resident, "sampledPeakMiB": sampledPeakMiB,
                   "memoryCacheHits": hits, "imageRequests": requests, "readyImages": ready, "meanLoadMs": ready > 0 ? loadMs / ready : 0,
-                  "errorCount": errors, "cancelledCount": cancelled,
+                  "errorCount": errors, "cancelledCount": cancelled, "missingAssets": missingAssets, "previewImages": previewImages,
+                  "cloudMisses": cloudMisses, "lastErrorCode": lastErrorCode, "timeouts": timeouts,
                   "activeRequests": Double(tasks.values.filter { $0.started > 0 }.count), "queuedRequests": Double(tasks.values.filter { $0.started == 0 }.count), "constrained": limited ? 1.0 : 0.0]
-    frames = 0; slowFrames = 0; maxFrameMs = 0; hits = 0; requests = 0; ready = 0; loadMs = 0; errors = 0; cancelled = 0
+    frames = 0; slowFrames = 0; maxFrameMs = 0; hits = 0; requests = 0; ready = 0; loadMs = 0; errors = 0; cancelled = 0; missingAssets = 0; previewImages = 0; cloudMisses = 0; lastErrorCode = 0; timeouts = 0
     return result
   }
 }

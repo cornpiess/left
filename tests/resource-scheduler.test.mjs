@@ -12,7 +12,8 @@ test('interaction defers background tasks; cancellation does not leave pending p
  const s=createResourceScheduler();s.setInteractive(true);let ran=false;
  const bg=s.run('stale',2,async()=>{ran=true;});await tick();assert.equal(ran,false);s.cancelQueued(k=>k==='stale');assert.equal(await bg,null);
  const current=s.run('current',0,async()=>42);assert.equal(await current,42);
- const next=s.run('bg',1,async()=>3);await tick();assert.equal(s.pending,1);s.setInteractive(false);assert.equal(await next,3);
+ const visible=s.run('visible-neighbour',1,async()=>3);assert.equal(await visible,3);
+ const next=s.run('bg',2,async()=>4);await tick();assert.equal(s.pending,1);s.setInteractive(false);assert.equal(await next,4);
 });
 
 test('background work reserves a slot for foreground and queued duplicates can be promoted',async()=>{

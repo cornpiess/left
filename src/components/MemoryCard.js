@@ -2026,7 +2026,7 @@ function MemoryCard({
             </Animated.View>
 
             {/* loading indicator (photo & video) — inside card for exact geometric center alignment */}
-            {active && !isBurst && showLoadingSpinner && ((showPhotoSurface && renderedStep === -1) || (isVideo && item.displayUri && !videoFirstFrame)) ? (
+            {active && showLoadingSpinner && ((showPhotoSurface && displayedMediaId !== item.id && stillStep !== 3) || (isVideo && item.displayUri && !videoFirstFrame)) ? (
               <View style={styles.videoLoadingOverlay} pointerEvents="none">
                 <View style={styles.videoLoadingMark}>
                   <ActivityIndicator size="small" color="#fff" />

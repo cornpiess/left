@@ -1308,6 +1308,11 @@ export async function getUriFallback(item) {
 }
 
 let trashItemsListCache = [];
+const trashMetadataListeners = new Set();
+export function subscribeTrashMetadata(listener) {
+  trashMetadataListeners.add(listener);
+  return () => trashMetadataListeners.delete(listener);
+}
 
 export function getTrashCount() {
   return USE_MOCK ? mockTrashIds.size : trashIds.size;
@@ -1328,7 +1333,12 @@ export async function fetchTrashItems(limit = 120, offset = 0) {
     if (trashDeletionPending || !isTrashAsset(item.id)) return;
     try {
       const info = await mediaResources.run(`trash-meta:${item.id}`, 0, () => MediaLibrary.getAssetInfoAsync(item.id, { shouldDownloadFromNetwork: false }));
-      if (info && !trashDeletionPending && isTrashAsset(item.id)) Object.assign(item, info);
+      if (info && !trashDeletionPending && isTrashAsset(item.id)) {
+        Object.assign(item, info);
+        for (const listener of trashMetadataListeners) {
+          try { listener(item); } catch {}
+        }
+      }
     } catch {}
   });
   trashItemsListCache = [...new Map([...items, ...trashItemsListCache].map(item => [item.id,item])).values()].slice(0,600);

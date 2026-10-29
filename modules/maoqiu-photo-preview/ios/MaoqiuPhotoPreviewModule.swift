@@ -8,7 +8,7 @@ public class MaoqiuPhotoPreviewModule: Module {
     AsyncFunction("deleteAssets") { (ids: [String]) async throws -> Bool in
       do {
         try await PHPhotoLibrary.shared().performChanges {
-          let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
+          let assets = PhotoResources.fetchAssets(ids)
           PHAssetChangeRequest.deleteAssets(assets)
         }
         return true
@@ -20,14 +20,14 @@ public class MaoqiuPhotoPreviewModule: Module {
     }
     AsyncFunction("getBurstIdentifiers") { (ids: [String]) -> [String: String] in
       var result: [String: String] = [:]
-      PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil).enumerateObjects { asset, _, _ in
+      PhotoResources.fetchAssets(ids).enumerateObjects { asset, _, _ in
         if let burst = asset.burstIdentifier { result[asset.localIdentifier] = burst }
       }
       return result
     }
     AsyncFunction("getAccessibleAssetIds") { (ids: [String]) -> [String] in
       var result: [String] = []
-      PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil).enumerateObjects { asset, _, _ in
+      PhotoResources.fetchAssets(ids).enumerateObjects { asset, _, _ in
         result.append(asset.localIdentifier)
       }
       return result
@@ -83,7 +83,7 @@ public class MaoqiuPhotoPreviewModule: Module {
 
 final class MaoqiuPhotoPreviewView: ExpoView {
   let imageView = UIImageView()
-  let blurView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+  let blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
   let onLoad = EventDispatcher()
   let onError = EventDispatcher()
   var resolutionScale: CGFloat = 1
@@ -95,6 +95,8 @@ final class MaoqiuPhotoPreviewView: ExpoView {
   var maxPixelSize: CGFloat = 4096
   private var assetId = ""
   private var hasFinalImage = false
+  private var hasReportedImage = false
+  private var failedAttempts = 0
   private var generation = 0
   private var token: UUID?
   private var requestedSize = CGSize.zero
@@ -117,7 +119,8 @@ final class MaoqiuPhotoPreviewView: ExpoView {
   func setAsset(_ value: String) {
     let id = value.hasPrefix("ph://") ? String(value.dropFirst(5)) : value
     guard id != assetId else { return }
-    cancel(); assetId = id; hasFinalImage = false; imageView.image = nil; requestedSize = .zero; setNeedsLayout()
+    cancel(); assetId = id; hasFinalImage = false; hasReportedImage = false; failedAttempts = 0
+    imageView.image = nil; requestedSize = .zero; setNeedsLayout()
   }
   private func cancel() {
     generation += 1
@@ -126,7 +129,7 @@ final class MaoqiuPhotoPreviewView: ExpoView {
   }
   override func didMoveToWindow() {
     super.didMoveToWindow()
-    if window == nil { cancel(); requestedSize = .zero; imageView.image = nil; hasFinalImage = false }
+    if window == nil { cancel(); requestedSize = .zero; imageView.image = nil; hasFinalImage = false; hasReportedImage = false }
     else { setNeedsLayout() }
   }
   override func layoutSubviews() {
@@ -137,15 +140,20 @@ final class MaoqiuPhotoPreviewView: ExpoView {
     guard size != requestedSize else { return }
     cancel(); hasFinalImage = false; requestedSize = size
     let version = generation
-    guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetId], options: nil).firstObject else {
-      onError(["assetId": assetId]); return
+    guard let asset = PhotoResources.fetchAssets([assetId]).firstObject else {
+      PhotoResources.shared.recordMissingAsset()
+      onError(["reason": "asset-unavailable"]); return
     }
     token = PhotoResources.shared.request(asset, size: size, priority: requestPriority, allowNetwork: networkAccess) { [weak self] image, degraded, wasCancelled in
       guard let self, self.generation == version, self.window != nil else { return }
       if let image {
         self.imageView.image = image
         self.hasFinalImage = !degraded
-        if !degraded { self.onLoad(["assetId": self.assetId]) }
+        if !self.hasReportedImage {
+          self.hasReportedImage = true
+          self.onLoad(["degraded": degraded])
+        }
+        if !degraded { self.failedAttempts = 0 }
         return
       }
       if wasCancelled {
@@ -156,12 +164,23 @@ final class MaoqiuPhotoPreviewView: ExpoView {
         self.requestedSize = .zero
         let delay = 0.35 + Double.random(in: 0...0.5)
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-          guard let self, self.window != nil, !self.hasFinalImage, self.imageView.image == nil else { return }
+          guard let self, self.generation == version, self.window != nil, !self.hasFinalImage else { return }
           self.requestedSize = .zero
           self.setNeedsLayout()
         }
       } else if !degraded {
-        self.onError(["assetId": self.assetId])
+        // Keep any low-resolution preview visible and retry transient PhotoKit
+        // or iCloud failures a bounded number of times without user action.
+        self.failedAttempts += 1
+        if self.failedAttempts <= 2 {
+          let delay = self.failedAttempts == 1 ? 1.0 : 4.0
+          DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.generation == version, self.window != nil, !self.hasFinalImage else { return }
+            self.requestedSize = .zero; self.setNeedsLayout()
+          }
+        } else if self.imageView.image == nil {
+          self.onError(["reason": "request-failed"])
+        }
       }
     }
   }

@@ -6,7 +6,8 @@ export function createResourceScheduler({ concurrency = 3 } = {}) {
   function pump() {
     waiting.sort((a,b) => a.priority-b.priority);
     while (active < concurrency && !suspended) {
-      const index = waiting.findIndex(task => task.priority === 0 || (!interactive && activeBackground < Math.max(1, concurrency - 1)));
+      const index = waiting.findIndex(task => task.priority === 0 ||
+        ((task.priority === 1 || !interactive) && activeBackground < Math.max(1, concurrency - 1)));
       if (index < 0) break;
       const task = waiting.splice(index,1)[0];
       active++;

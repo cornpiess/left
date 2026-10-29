@@ -26,7 +26,7 @@ function isAllowedUri(uri) {
 
 function BackdropImage({ source, ...props }) {
   return supportsNativePhotoPreview && source.uri.startsWith('ph://')
-    ? <PhotoKitPreview uri={source.uri} {...props} priority={2} maxPixelSize={512} blurred />
+    ? <PhotoKitPreview uri={source.uri} {...props} priority={1} maxPixelSize={512} blurred />
     : <RNImage source={source} {...props} />;
 }
 

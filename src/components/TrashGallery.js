@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, formatBytes } from '../theme';
 import { GlassPanel, JellyPressable } from './Glass';
-import { emptyTrash, fetchTrashSummary, fetchTrashItems, getAssetSizeBytes, getDisplayUri, getUriFallback, isVideoAsset, loadExif, restoreFromTrash } from '../media';
+import { emptyTrash, fetchTrashSummary, fetchTrashItems, getAssetSizeBytes, getDisplayUri, getUriFallback, isVideoAsset, loadExif, restoreFromTrash, subscribeTrashMetadata } from '../media';
 import { getRenderableImageUri } from '../mediaPage.mjs';
 import PhotoKitPreview from './PhotoKitPreview';
 import { supportsNativePhotoPreview } from '../nativePhotoPreview';
@@ -112,6 +112,8 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
   const [deleteNotice, setDeleteNotice] = useState(false);
   const deletingRef = useRef(false);
   const refreshVersionRef = useRef(0);
+  const metadataUpdatesRef = useRef(new Map());
+  const metadataTimerRef = useRef(null);
   const dismissY = useRef(new Animated.Value(0)).current;
   const dismissingRef = useRef(false);
   // Video covers that already went through thumbnail generation (success or
@@ -197,6 +199,21 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
     });
     Promise.all(coverWorkers).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    const unsubscribe = subscribeTrashMetadata(item => {
+      metadataUpdatesRef.current.set(item.id, { ...item });
+      if (metadataTimerRef.current) return;
+      metadataTimerRef.current = setTimeout(() => {
+        metadataTimerRef.current = null;
+        const updates = metadataUpdatesRef.current;
+        metadataUpdatesRef.current = new Map();
+        setItems(current => current.map(entry => updates.has(entry.id) ? { ...entry, ...updates.get(entry.id) } : entry));
+      }, 80);
+    });
+    return () => { unsubscribe(); clearTimeout(metadataTimerRef.current); metadataTimerRef.current = null; metadataUpdatesRef.current.clear(); };
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;

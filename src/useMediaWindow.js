@@ -26,6 +26,12 @@ export default function useMediaWindow({ nextItems, width, height, interactive, 
             req: snapshot.imageRequests, ms: Math.round(snapshot.meanLoadMs), hot: snapshot.constrained,
             err: snapshot.errorCount, cxl: snapshot.cancelledCount,
           });
+          if (snapshot.errorCount || snapshot.missingAssets || snapshot.cloudMisses || snapshot.timeouts || snapshot.queuedRequests > 0) {
+            // Aggregate only: no asset IDs, filenames, location or image data.
+            flightEvent('photo-diagnostics', { err: snapshot.errorCount, code: snapshot.lastErrorCode,
+              cloud: snapshot.cloudMisses, miss: snapshot.missingAssets, preview: snapshot.previewImages,
+              queued: snapshot.queuedRequests, active: snapshot.activeRequests, hot: snapshot.constrained, timeout: snapshot.timeouts });
+          }
         }
       } catch {} finally { busy = false; }
     };
