@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image as RNImage, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import PhotoKitPreview from './PhotoKitPreview';
 import { supportsNativePhotoPreview } from '../nativePhotoPreview';
@@ -45,6 +45,8 @@ export default function AmbientBackdrop({ source, style }) {
     uri = source.displayUri || source.imageUri || source.localUri || source.uri || null;
   }
   const valid = isAllowedUri(uri);
+  const targetRef = useRef(null);
+  targetRef.current = valid ? uri : null;
 
   // When the incoming source changes, queue it as nextUri.
   // The old frontUri stays visible until nextUri finishes loading.
@@ -85,34 +87,31 @@ export default function AmbientBackdrop({ source, style }) {
   };
 
   // Promote nextUri → frontUri once it finishes loading.
-  const handleNextLoad = useCallback(() => {
-    setFrontUri(nextUri);
-    setNextUri(null);
-  }, [nextUri]);
+  const handleNextLoad = useCallback((loadedUri) => {
+    if (targetRef.current !== loadedUri) return;
+    setFrontUri(loadedUri);
+    setNextUri(current => current === loadedUri ? null : current);
+  }, []);
+
+  // Keep the same keyed native view when a loaded back layer becomes front.
+  // Remounting it would discard the image and produce a black transition.
+  const layers = [
+    ...(nextUri && nextUri !== frontUri ? [{ uri: nextUri, pending: true }] : []),
+    ...(frontUri ? [{ uri: frontUri, pending: false }] : []),
+  ];
 
   return (
     <View style={[styles.root, style]} pointerEvents="none">
-      {/* Back layer: loading the NEXT image; hidden behind front until ready */}
-      {nextUri && nextUri !== frontUri ? (
-        <BackdropImage
-          source={{ uri: nextUri }}
+      {layers.map(layer => (
+        <BackdropImage key={layer.uri}
+          source={{ uri: layer.uri }}
           style={tileStyle}
           resizeMode="cover"
           blurRadius={BLUR_RADIUS}
-          onLoad={handleNextLoad}
-          onError={() => setNextUri(null)}
+          onLoad={layer.pending ? () => handleNextLoad(layer.uri) : undefined}
+          onError={layer.pending ? () => setNextUri(current => current === layer.uri ? null : current) : undefined}
         />
-      ) : null}
-
-      {/* Front layer: the currently displayed image (stable, never flashes) */}
-      {frontUri ? (
-        <BackdropImage
-          source={{ uri: frontUri }}
-          style={tileStyle}
-          resizeMode="cover"
-          blurRadius={BLUR_RADIUS}
-        />
-      ) : null}
+      ))}
 
       {/* Liquid Glass overlays — gated to frontUri, never flicker on load */}
       {frontUri ? (

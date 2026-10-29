@@ -32,6 +32,8 @@ test('ambient double buffer asks for a visible, blurred, size-bounded preview', 
   assert.equal(native.props.blurred, true); assert.equal(native.props.maxPixelSize, 512);
   pending.props.onLoad();
   assert.equal(c.slots[0], 'ph://a');
+  const front = flatten(c.render()).find(node => node.type?.name === 'BackdropImage');
+  assert.equal(front.props.key, pending.props.key, 'promotion keeps the same native layer');
 });
 
 test('pending-bin metadata updates tell the live grid that a default photo is actually a video', async () => {
