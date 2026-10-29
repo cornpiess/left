@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "LeftSwipe",
+    "slug": "maoqiu",
+    "version": "1.0.6",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "buildNumber": "15",
+      "supportsTablet": false,
+      "bundleIdentifier": "com.cornpiess.hairball",
+      "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true,
+        "NSPhotoLibraryUsageDescription": "毛球需要访问您的系统相册，默认保留，左滑即删，帮您轻松整理和清理照片。",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "locales": {
+      "zh-Hans": "./locales/zh-Hans.json",
+      "zh-Hant": "./locales/zh-Hant.json",
+      "en": "./locales/en.json",
+      "ja": "./locales/ja.json",
+      "ko": "./locales/ko.json",
+      "es": "./locales/es.json"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-image",
+      "expo-video",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "毛球需要访问您的系统相册，默认保留，左滑即删，帮您轻松整理和清理照片。"
+        }
+      ],
+      "expo-localization",
+      "expo-web-browser",
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f15c5b77-773d-4c22-8d6e-0c5a2b4ddb93"
+      }
+    },
+    "owner": "zhuzhu1995"
+  }
+}

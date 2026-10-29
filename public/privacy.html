@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="LeftSwipe隐私政策：相册内容在设备本地处理，不上传照片或视频 | LeftSwipe Privacy Policy">
+  <title>LeftSwipe - 隐私政策 | LeftSwipe - Privacy Policy</title>
+  <style>
+    :root { 
+      color-scheme: dark; 
+      --bg:#0d0f12; 
+      --card:#17191e; 
+      --text:#fff; 
+      --muted:#c5c7ce; 
+      --accent:#e0aaff; 
+      --border:#30323a; 
+      --btn-bg: rgba(255, 255, 255, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body { 
+      margin:0; 
+      padding:24px 16px; 
+      background:var(--bg); 
+      color:var(--text); 
+      font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; 
+    }
+    main { 
+      max-width:780px; 
+      margin:auto; 
+      padding:36px 28px; 
+      background:var(--card); 
+      border:1px solid var(--border); 
+      border-radius:20px; 
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    .lang-switch {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px;
+      margin-bottom: 24px;
+    }
+    .lang-btn {
+      background: var(--btn-bg);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 5px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .lang-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+    .lang-btn.active {
+      background: var(--accent);
+      color: #0d0f12;
+      border-color: var(--accent);
+    }
+    .lang-content {
+      display: none;
+    }
+    .lang-content.active {
+      display: block;
+    }
+    h1 { margin:0 0 8px; font-size:26px; line-height:1.3; color:#fff; }
+    h2 { margin:30px 0 8px; color:var(--accent); font-size:18px; }
+    p, li, td, th { color:var(--muted); }
+    a { color:var(--accent); overflow-wrap:anywhere; }
+    .notice { padding:16px 18px; margin:22px 0; border:1px solid #633f7c; border-radius:12px; background:#261d2d; }
+    .meta, footer { color:#92959f; font-size:13px; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; }
+    th, td { padding:10px; border:1px solid var(--border); text-align:left; vertical-align:top; }
+    th { color:#fff; background: rgba(255, 255, 255, 0.03); }
+    footer { margin-top:38px; padding-top:18px; border-top:1px solid var(--border); text-align:center; }
+  </style>
+</head>
+<body>
+<main>
+  <!-- 6 语言切换菜单 -->
+  <div class="lang-switch">
+    <button id="btn-zh-Hans" class="lang-btn" onclick="setLanguage('zh-Hans')">简体中文</button>
+    <button id="btn-zh-Hant" class="lang-btn" onclick="setLanguage('zh-Hant')">繁體中文</button>
+    <button id="btn-en" class="lang-btn" onclick="setLanguage('en')">English</button>
+    <button id="btn-ja" class="lang-btn" onclick="setLanguage('ja')">日本語</button>
+    <button id="btn-ko" class="lang-btn" onclick="setLanguage('ko')">한국어</button>
+    <button id="btn-es" class="lang-btn" onclick="setLanguage('es')">Español</button>
+  </div>
+
+  <!-- 1. 简体中文 (zh-Hans) -->
+  <div id="content-zh-Hans" class="lang-content active">
+    <h1>毛球隐私政策</h1>
+    <p class="meta">更新日期与生效日期：2026 年 8 月 25 日</p>
+
+    <div class="notice">
+      <p><strong>核心结论：</strong>毛球不会收集、上传、出售或用于广告追踪您的照片、视频、照片 GPS、相册元数据或 App 内整理记录。相册分析和状态记录在您的设备本地完成。</p>
+      <p>隐私联系邮箱：<a href="mailto:961819912@qq.com">961819912@qq.com</a></p>
+    </div>
+
+    <h2>1. 适用范围</h2>
+    <p>本政策说明毛球如何处理您在 iPhone 上使用本应用时涉及的数据，包括系统相册媒体、媒体元数据、本地设置和 Apple 应用内购买状态。使用 Apple 或网页服务时，相应服务提供方也可能按照其政策独立处理必要数据。</p>
+
+    <h2>2. 我们是否收集数据</h2>
+    <p>开发者没有账户系统、分析服务器、广告 SDK 或用户数据库，不会从本应用收集可由开发者或第三方访问的用户数据。我们不会接收您的照片、视频、精确位置、设备标识符、联系人或使用行为记录，也不进行跨 App/网站追踪。</p>
+
+    <h2>3. 仅在设备本地处理的数据</h2>
+    <table>
+      <thead><tr><th>数据</th><th>用途</th><th>保存位置</th></tr></thead>
+      <tbody>
+        <tr><td>照片、视频与实况照片</td><td>显示、播放、收藏、加入待删相册，以及在您确认后请求系统删除</td><td>系统照片图库；App 可能生成临时本地缓存</td></tr>
+        <tr><td>拍摄时间、尺寸、时长、连拍标识、EXIF 与照片 GPS</td><td>媒体信息展示、按日期浏览、连拍分组和空间估算；照片 GPS 不会发送给地理编码服务</td><td>设备内存或 App 本地沙盒</td></tr>
+        <tr><td>已浏览记录、待删相册索引、收藏状态、推荐偏好、每日额度、已清理空间统计</td><td>维持整理进度、避免重复推荐并提供本地统计</td><td>App 本地沙盒</td></tr>
+        <tr><td>PRO 权益状态</td><td>解锁已购买功能、恢复购买并避免重复购买</td><td>Apple StoreKit 与 App 本地沙盒</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. 系统权限</h2>
+    <ul>
+      <li><strong>照片读取和修改权限：</strong>用于读取和显示媒体、查询本地元数据、修改系统收藏状态，以及在您明确确认后请求将媒体移入 iOS“最近删除”。</li>
+      <li><strong>照片添加权限：</strong>仅在需要将处理结果保存回系统相册时使用。</li>
+      <li><strong>不使用的权限：</strong>毛球不录音、不拍摄，因此不申请麦克风或相机权限；也不申请通讯录、健康数据或系统定位权限。</li>
+    </ul>
+    <p>您可以在 iOS“设置”→“毛球”中查看、更改或撤回相册权限。撤回后，依赖相册访问的功能将无法继续使用。</p>
+
+    <h2>5. Apple 内购与第三方服务</h2>
+    <p>包年订阅和终身买断由 Apple App Store / StoreKit 处理。Apple 可能处理 Apple ID、交易、付款和诊断信息；开发者不会接触您的完整银行卡号或支付密码。App 只读取完成购买和恢复权益所需的交易结果。Apple 的处理方式适用其<a href="https://www.apple.com/legal/privacy/">隐私政策</a>。</p>
+    <p>当您主动点击 App 内的隐私政策、服务条款或支持链接时，系统浏览器会连接相应网页及其托管服务。托管服务可能接收完成网页请求所需的 IP 地址、浏览器信息和服务器日志；毛球不会把照片、视频或照片 GPS 附加到这些请求中，也不会从托管服务取得这些日志。</p>
+
+    <h2>6. 数据共享、出售与追踪</h2>
+    <p>我们不出售个人数据，不将数据用于定向广告，不与数据经纪商共享数据，也不使用跨 App 或跨网站追踪技术。除 Apple 为完成您主动发起的购买/恢复操作而处理必要信息，以及您主动打开外部网页外，开发者不会向第三方传输用户数据。</p>
+
+    <h2>7. 保存期限与删除</h2>
+    <ul>
+      <li>本地设置和整理记录保存到您重置相关记录或卸载 App 为止。</li>
+      <li>临时媒体缓存由 App 管理，可在缓存失效、空间清理或卸载 App 时删除。</li>
+      <li>卸载 App 会删除其本地沙盒数据，但不会删除仍位于系统照片图库中的原始媒体，也不会自动取消 Apple 订阅。</li>
+      <li>已经由您确认移入 iOS“最近删除”的媒体，其保留和删除由 iOS 及您的系统操作控制。</li>
+      <li>由于开发者不持有服务器端用户数据库，因此通常没有可供开发者远程删除的账户数据；如有疑问可通过本政策所列邮箱联系我们。</li>
+    </ul>
+
+    <h2>8. 您的选择与权利</h2>
+    <p>您可以撤回相册权限、恢复待删相册内尚未系统删除的项目、重置本地浏览历史、卸载 App 删除本地数据，以及通过 iOS 订阅设置管理订阅。若您对访问、更正、删除或投诉权利有疑问，可联系开发者；我们会根据适用法律处理。</p>
+
+    <h2>9. 儿童隐私</h2>
+    <p>毛球不以收集儿童个人信息为目的，也不会有意收集儿童数据。由于开发者不接收 App 数据，儿童的相册内容同样保留在设备本地。</p>
+
+    <h2>10. 安全与跨境处理</h2>
+    <p>核心相册整理不依赖开发者服务器，降低了媒体泄露风险。数据仍受设备安全、iOS 权限和您的 Apple ID 安全设置影响。开发者不进行照片或视频的跨境传输；Apple 或网页托管服务的必要网络处理可能发生在其运营地区，并受其各自政策约束。</p>
+
+    <h2>11. 政策更新</h2>
+    <p>若功能、第三方服务或法律要求变化，我们会更新本政策的日期和内容，并在 App 或本页面提供最新版本。若未来新增媒体上传、远端分析或其他数据收集，会在启用前提供明确说明并在需要时取得您的同意。</p>
+
+    <h2>12. 联系我们</h2>
+    <p>隐私问题、意见或投诉请发送至：<a href="mailto:961819912@qq.com">961819912@qq.com</a>。</p>
+
+    <footer>© 2026 毛球 Team · Bundle ID: com.cornpiess.hairball</footer>
+  </div>
+
+  <!-- 2. 繁體中文 (zh-Hant) -->
+  <div id="content-zh-Hant" class="lang-content">
+    <h1>LeftSwipe隱私權政策</h1>
+    <p class="meta">更新日期與生效日期：2026 年 8 月 25 日</p>
+
+    <div class="notice">
+      <p><strong>核心結論：</strong>LeftSwipe不會收集、上傳、出售或用於廣告追蹤您的照片、影片、照片 GPS、相簿中繼資料或 App 內整理紀錄。相簿分析與狀態紀錄均在您的裝置本機完成。</p>
+      <p>隱私聯絡信箱：<a href="mailto:961819912@qq.com">961819912@qq.com</a></p>
+    </div>
+
+    <h2>1. 適用範圍</h2>
+    <p>本政策說明LeftSwipe如何處理您在 iPhone 上使用本應用程式時涉及的資料，包括系統相簿媒體、媒體中繼資料、本機設定與 Apple 應用程式內購買狀態。使用 Apple 或網頁服務時，相應服務提供方亦可能依據其政策獨立處理必要資料。</p>
+
+    <h2>2. 我們是否收集資料</h2>
+    <p>開發者沒有帳號系統、分析伺服器、廣告 SDK 或使用者資料庫，不會從本應用程式收集可由開發者或第三方存取的使用者資料。我們絕不接收您的照片、影片、精確位置、裝置識別碼、聯絡人或使用行為紀錄，亦不進行跨 App 或跨網站追蹤。</p>
+
+    <h2>3. 僅在裝置本機處理的資料</h2>
+    <table>
+      <thead><tr><th>資料類型</th><th>用途</th><th>儲存位置</th></tr></thead>
+      <tbody>
+        <tr><td>照片、影片與原況照片</td><td>顯示、播放、收藏、加入待删相册，以及在您確認後請求系統刪除</td><td>系統照片圖庫；App 可能產生暫時性本機快取</td></tr>
+        <tr><td>拍攝時間、尺寸、時長、連拍標識、EXIF 與照片 GPS</td><td>媒體資訊展示、按日期瀏覽、連拍分組與空間估算；照片 GPS 絕不發送給地理編碼服務</td><td>裝置記憶體或 App 本機沙盒</td></tr>
+        <tr><td>已瀏覽紀錄、待删相册索引、收藏狀態、推薦偏好、每日額度、已清理空間統計</td><td>維持整理進度、避免重複推薦並提供本機統計</td><td>App 本機沙盒</td></tr>
+        <tr><td>PRO 權益狀態</td><td>解鎖已購買功能、恢復購買並避免重複購買</td><td>Apple StoreKit 與 App 本機沙盒</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. 系統權限</h2>
+    <ul>
+      <li><strong>照片讀取與修改權限：</strong>用於讀取與顯示媒體、查詢本機中繼資料、修改系統收藏狀態，以及在您明確確認後請求將媒體移入 iOS「最近刪除」。</li>
+      <li><strong>照片加入權限：</strong>僅在需要將處理結果儲存回系統相簿時使用。</li>
+      <li><strong>不使用的權限：</strong>LeftSwipe不錄音、不拍照，因此不申請麥克風或相機權限；亦不申請通訊錄、健康資料或系統定位權限。</li>
+    </ul>
+    <p>您可以在 iOS「設定」→「LeftSwipe」中隨時檢視、修改或撤回相簿權限。撤回後，依賴相簿存取的功能將無法繼續使用。</p>
+
+    <h2>5. Apple 內購與第三方服務</h2>
+    <p>年費訂閱與終身買斷由 Apple App Store / StoreKit 處理。Apple 可能處理 Apple ID、交易、付款與診斷資訊；開發者絕不接觸您的完整信用卡號或付款密碼。App 僅讀取完成購買與恢復權益所需的交易結果。Apple 的處理方式適用其<a href="https://www.apple.com/legal/privacy/">隱私權政策</a>。</p>
+    <p>當您主動點擊 App 內的隱私權政策、服務條款或支援連結時，系統瀏覽器會連線至相應網頁及其託管服務。LeftSwipe絕不會將照片、影片或照片 GPS 附加至這些請求中。</p>
+
+    <h2>6. 資料共享、出售與追蹤</h2>
+    <p>我們絕不出售個人資料，不將資料用於定向廣告，不與資料經紀商共享資料，亦不使用跨 App 或跨網站追蹤技術。</p>
+
+    <h2>7. 保存期限與刪除</h2>
+    <ul>
+      <li>本機設定與整理紀錄保存至您重設相關紀錄或解除安裝 App 為止。</li>
+      <li>暫存媒體快取由 App 自動管理，會在快取失效、空間清理或解除安裝 App 時刪除。</li>
+      <li>解除安裝 App 會刪除其本機沙盒資料，但不會刪除仍位於系統照片圖庫中的原始媒體，亦不會自動取消 Apple 訂閱。</li>
+      <li>已由您確認移入 iOS「最近刪除」的媒體，其保留與刪除由 iOS 及您的系統操作控制（可於 30 天內復原）。</li>
+    </ul>
+
+    <h2>8. 您的選擇與權利</h2>
+    <p>您可以撤回相簿權限、復原待删相册內尚未系統刪除的項目、重設本機瀏覽紀錄、解除安裝 App 刪除本機資料，以及透過 iOS 訂閱設定管理訂閱。</p>
+
+    <h2>9. 兒童隱私</h2>
+    <p>LeftSwipe不以收集兒童個人資訊為目的，亦不會有意收集兒童資料。兒童的相簿內容同樣僅保留在裝置本機。</p>
+
+    <h2>10. 安全與跨境處理</h2>
+    <p>核心相簿整理不依賴開發者伺服器，降低了媒體外洩風險。開發者不進行照片或影片的跨境傳輸。</p>
+
+    <h2>11. 政策更新</h2>
+    <p>若功能或法規要求變化，我們會更新本政策並在 App 或本頁面提供最新版本。</p>
+
+    <h2>12. 聯絡我們</h2>
+    <p>隱私問題、意見或投訴請寄至：<a href="mailto:961819912@qq.com">961819912@qq.com</a>。</p>
+
+    <footer>© 2026 LeftSwipe Team · Bundle ID: com.cornpiess.hairball</footer>
+  </div>
+
+  <!-- 3. English (en) -->
+  <div id="content-en" class="lang-content">
+    <h1>LeftSwipe Privacy Policy</h1>
+    <p class="meta">Last Updated & Effective Date: August 25, 2026</p>
+
+    <div class="notice">
+      <p><strong>Core Takeaway:</strong> LeftSwipe does NOT collect, upload, sell, or use your photos, videos, photo GPS, album metadata, or in-app cleanup history for advertising or tracking. All photo library analysis and status records are processed 100% locally on your device.</p>
+      <p>Privacy Contact: <a href="mailto:961819912@qq.com">961819912@qq.com</a></p>
+    </div>
+
+    <h2>1. Scope of Application</h2>
+    <p>This policy explains how LeftSwipe handles data when you use the app on your iPhone, including system photo library media, media metadata, local preferences, and Apple In-App Purchase status. When using Apple services or web links, the respective providers may independently process necessary data under their own policies.</p>
+
+    <h2>2. Data Collection Policy</h2>
+    <p>The developer operates no user account system, analytics server, advertising SDK, or user database. We do not collect any user data accessible to the developer or third parties. We never receive your photos, videos, precise location, device identifiers, contacts, or usage behavior, nor do we engage in cross-app or cross-website tracking.</p>
+
+    <h2>3. Data Processed Strictly Locally on Device</h2>
+    <table>
+      <thead><tr><th>Data Type</th><th>Purpose</th><th>Storage Location</th></tr></thead>
+      <tbody>
+        <tr><td>Photos, videos & Live Photos</td><td>Displaying, playing, favoriting, stashing in Review Bin, and requesting iOS system deletion upon your confirmation</td><td>System Photo Library; App may create temporary local cache</td></tr>
+        <tr><td>Timestamp, dimensions, duration, burst identifier, EXIF & Photo GPS</td><td>Media information display, day-by-day browsing, burst grouping, and storage estimation; Photo GPS is never sent to reverse-geocoding services</td><td>Device memory or App local sandbox</td></tr>
+        <tr><td>Browsed history, Review Bin indices, favorite states, recommendation mode, daily quota, cleaned storage statistics</td><td>Maintaining cleanup progress, avoiding repeated recommendations, and providing local statistics</td><td>App local sandbox</td></tr>
+        <tr><td>PRO entitlement status</td><td>Unlocking purchased features, restoring purchases, and preventing duplicate purchases</td><td>Apple StoreKit & App local sandbox</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. System Permissions</h2>
+    <ul>
+      <li><strong>Photo Library Read & Write Permission:</strong> Used to read and display media, inspect local metadata, update system favorite status, and request moving media to the iOS "Recently Deleted" album upon your explicit confirmation.</li>
+      <li><strong>Add Photos Permission:</strong> Used only if needed to save organized results back to your system photo library.</li>
+      <li><strong>Permissions Not Used:</strong> LeftSwipe does not capture audio or take photos; therefore, it does not request Microphone or Camera permissions. It also never requests Contacts, Health data, or System Location permissions.</li>
+    </ul>
+    <p>You can view, modify, or revoke photo library permissions at any time in iOS "Settings" → "LeftSwipe". If revoked, features dependent on photo library access will become unavailable.</p>
+
+    <h2>5. Apple In-App Purchases & Third-Party Services</h2>
+    <p>Annual subscriptions and lifetime purchases are processed securely by Apple App Store / StoreKit. Apple may process Apple ID, transaction, payment, and diagnostic information; the developer never has access to your full credit card number or payment credentials. The app only verifies transaction status necessary to unlock and restore PRO features. Apple's data practices are governed by the <a href="https://www.apple.com/legal/privacy/">Apple Privacy Policy</a>.</p>
+    <p>When you tap on the Privacy Policy, Terms of Service, or Support links within the app, the system browser connects to the respective web pages and hosting services. The hosting service may receive standard IP addresses, browser information, and server logs required to fulfill web requests. LeftSwipe never attaches photos, videos, or photo GPS to these requests, nor do we access server logs from the hosting service.</p>
+
+    <h2>6. Data Sharing, Sale & Tracking</h2>
+    <p>We do not sell personal data, do not use data for targeted advertising, do not share data with data brokers, and do not employ cross-app or cross-website tracking. Other than Apple processing necessary information for user-initiated purchases/restorations and user-initiated external web browsing, the developer transmits zero user data to third parties.</p>
+
+    <h2>7. Data Retention & Deletion</h2>
+    <ul>
+      <li>Local preferences and cleanup records remain on your device until you reset history or uninstall the app.</li>
+      <li>Temporary media cache is managed by the app and purged upon invalidation, cache cleanup, or app uninstallation.</li>
+      <li>Uninstalling the app deletes its local sandbox data, but does not delete original photos/videos stored in your iOS Photo Library, nor does it automatically cancel Apple subscriptions.</li>
+      <li>Photos/videos confirmed by you to be moved to iOS "Recently Deleted" are retained and deleted according to iOS system rules (recoverable for up to 30 days).</li>
+      <li>Since the developer maintains no server-side database, there is no remote account data to delete; feel free to contact us via email for any inquiries.</li>
+    </ul>
+
+    <h2>8. Your Choices & Rights</h2>
+    <p>You can revoke photo library permissions, restore items from the Review Bin prior to system deletion, reset local browsing history, delete all local app data by uninstalling the app, and manage subscriptions via iOS Subscription Settings. For inquiries regarding data rights, contact the developer directly and we will respond in accordance with applicable laws.</p>
+
+    <h2>9. Children's Privacy</h2>
+    <p>LeftSwipe is not intended for collecting personal information from children, nor do we knowingly collect data from children. Since the developer receives no user data, any children's photo library contents remain strictly on the local device.</p>
+
+    <h2>10. Security & Cross-Border Processing</h2>
+    <p>Core photo organization runs without relying on developer servers, eliminating the risk of cloud media leaks. Data remains protected by your device security, iOS sandbox permissions, and Apple ID security settings. The developer does not perform cross-border transfers of your photos or videos. Necessary web requests by Apple or web hosting services may occur in regions where they operate, subject to their respective policies.</p>
+
+    <h2>11. Policy Updates</h2>
+    <p>If features, third-party services, or legal requirements change, we will update the date and contents of this policy and provide the latest version within the app or on this page. If remote media upload or cloud analytics are ever introduced in the future, clear disclosure and prior consent will be obtained.</p>
+
+    <h2>12. Contact Us</h2>
+    <p>For privacy questions, feedback, or complaints, please contact: <a href="mailto:961819912@qq.com">961819912@qq.com</a>.</p>
+
+    <footer>© 2026 LeftSwipe Team · Bundle ID: com.cornpiess.hairball</footer>
+  </div>
+
+  <!-- 4. 日本語 (ja) -->
+  <div id="content-ja" class="lang-content">
+    <h1>LeftSwipe プライバシーポリシー</h1>
+    <p class="meta">最終更新日および発効日：2026年8月25日</p>
+
+    <div class="notice">
+      <p><strong>重要事項：</strong>「LeftSwipe」は、お客様の写真、動画、Live Photos、写真の位置情報（GPS）、メタデータ、アプリ内整理履歴を収集、アップロード、販売、または広告追跡に利用することは一切ありません。すべての写真解析および整理処理はお使いの端末内（ローカル）で100%完結します。</p>
+      <p>お問い合わせ窓口：<a href="mailto:961819912@qq.com">961819912@qq.com</a></p>
+    </div>
+
+    <h2>1. 適用範囲</h2>
+    <p>本ポリシーは、お客様がiPhoneで「LeftSwipe」をご利用いただく際のデータ取り扱いについて説明するものです。</p>
+
+    <h2>2. データの収集について</h2>
+    <p>開発者はアカウントサーバー、分析サーバー、広告SDK、ユーザーデータベースを一切保有しておらず、ユーザーデータを収集することはありません。写真、動画、位置情報、識別子が外部に送信されることはありません。</p>
+
+    <h2>3. 端末内（ローカル）でのみ処理されるデータ</h2>
+    <table>
+      <thead><tr><th>データ種別</th><th>利用目的</th><th>保存場所</th></tr></thead>
+      <tbody>
+        <tr><td>写真、動画、Live Photos</td><td>表示、再生、お気に入り登録、レビューボックスへの仮移動、削除要求</td><td>システムフォトライブラリ（一時キャッシュを生成する場合あり）</td></tr>
+        <tr><td>撮影日時、サイズ、EXIF、位置情報</td><td>情報表示、日付別表示、連写グループ化、容量計算（外部ジオコーディング送信なし）</td><td>端末メモリまたはアプリ内サンドボックス</td></tr>
+        <tr><td>閲覧履歴、レビューボックス索引、PRO状態</td><td>整理の進捗維持、重複推薦の防止、特典のアンロック</td><td>Apple StoreKit およびアプリ内サンドボックス</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. システム権限</h2>
+    <ul>
+      <li><strong>写真の読み取りと変更権限：</strong>写真の整理および削除のために使用します。</li>
+      <li><strong>使用しない権限：</strong>マイク、カメラ、連絡先、位置情報などの不要な権限は一切要求しません。</li>
+    </ul>
+
+    <h2>5. Apple アプリ内課金および外部サービス</h2>
+    <p>年間サブスクリプションおよび買い切りプランはApple StoreKitにより安全に処理されます。開発者がお客様のクレジットカード情報に触れることはありません。</p>
+
+    <h2>6. データの第三者提供と追跡</h2>
+    <p>当社は個人データの販売、広告追跡、第三者提供を一切行いません。</p>
+
+    <h2>7. データの保存と削除</h2>
+    <p>アプリをアンインストールするとアプリ内のローカルデータは削除されますが、iPhoneの写真アプリ内の元データは保持されます。</p>
+
+    <h2>8. お問い合わせ</h2>
+    <p>プライバシーに関するご質問は、<a href="mailto:961819912@qq.com">961819912@qq.com</a> までご連絡ください。</p>
+
+    <footer>© 2026 LeftSwipe Team · Bundle ID: com.cornpiess.hairball</footer>
+  </div>
+
+  <!-- 5. 한국어 (ko) -->
+  <div id="content-ko" class="lang-content">
+    <h1>LeftSwipe 개인정보 처리방침</h1>
+    <p class="meta">최종 업데이트 및 시행일: 2026년 8월 25일</p>
+
+    <div class="notice">
+      <p><strong>핵심 요약:</strong> LeftSwipe는 귀하의 사진, 동영상, Live Photo, 위치 정보(GPS), 메타데이터 또는 정리 기록을 수집, 업로드, 판매하거나 광고 추적에 사용하지 않습니다. 모든 사진 분석 및 데이터 처리는 100% 귀하의 기기 로컬에서만 수행됩니다.</p>
+      <p>개인정보 문의: <a href="mailto:961819912@qq.com">961819912@qq.com</a></p>
+    </div>
+
+    <h2>1. 적용 범위</h2>
+    <p>본 방침은 귀하가 iPhone에서 LeftSwipe 앱을 사용할 때 처리되는 데이터에 대해 설명합니다.</p>
+
+    <h2>2. 데이터 수집 여부</h2>
+    <p>개발자는 사용자 계정 시스템, 분석 서버, 광고 SDK 또는 데이터베이스를 운영하지 않으며, 어떠한 개인 데이터도 수집하지 않습니다. 사진, 동영상, 위치 정보 등은 절대 외부로 전송되지 않습니다.</p>
+
+    <h2>3. 기기 로컬에서만 처리되는 데이터</h2>
+    <table>
+      <thead><tr><th>데이터 유형</th><th>처리 목적</th><th>저장 위치</th></tr></thead>
+      <tbody>
+        <tr><td>사진, 동영상 및 Live Photo</td><td>미디어 표시, 즐겨찾기, LeftSwipe 보관함 이동 및 삭제 요청</td><td>시스템 사진 보관함 및 임시 로컬 캐시</td></tr>
+        <tr><td>촬영 시간, 크기, EXIF, GPS</td><td>미디어 정보 표시, 날짜별 탐색, 연속 촬영 분류 및 용량 계산</td><td>기기 메모리 또는 앱 로컬 샌드박스</td></tr>
+        <tr><td>정리 기록, 설정, PRO 혜택 상태</td><td>정리 진행 상태 유지 및 기능 잠금 해제</td><td>Apple StoreKit 및 앱 로컬 샌드박스</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. 시스템 권한 안내</h2>
+    <ul>
+      <li><strong>사진 접근 및 수정 권한:</strong> 사진을 읽고 정리 및 삭제 요청을 수행하기 위해 사용됩니다.</li>
+      <li><strong>사용하지 않는 권한:</strong> LeftSwipe는 마이크, 카메라, 연락처, 기기 위치 권한을 요구하지 않습니다.</li>
+    </ul>
+
+    <h2>5. 인앱 결제</h2>
+    <p>모든 결제 및 구독은 Apple StoreKit을 통해 안전하게 처리되며 개발자는 금융 정보를 보유하지 않습니다.</p>
+
+    <h2>6. 문의하기</h2>
+    <p>개인정보 관련 문의는 <a href="mailto:961819912@qq.com">961819912@qq.com</a>으로 연락해 주시기 바랍니다.</p>
+
+    <footer>© 2026 LeftSwipe Team · Bundle ID: com.cornpiess.hairball</footer>
+  </div>
+
+  <!-- 6. Español (es) -->
+  <div id="content-es" class="lang-content">
+    <h1>Política de Privacidad de LeftSwipe</h1>
+    <p class="meta">Última actualización: 25 de agosto de 2026</p>
+
+    <div class="notice">
+      <p><strong>Conclusión principal:</strong> LeftSwipe NO recopila, sube, vende ni utiliza tus fotos, vídeos, GPS de fotos, metadatos ni historial de limpieza para publicidad o seguimiento. Todo el análisis se realiza 100% en tu dispositivo local.</p>
+      <p>Contacto: <a href="mailto:961819912@qq.com">961819912@qq.com</a></p>
+    </div>
+
+    <h2>1. Ámbito de aplicación</h2>
+    <p>Esta política describe cómo LeftSwipe maneja los datos al usar la app en tu iPhone.</p>
+
+    <h2>2. Recopilación de datos</h2>
+    <p>El desarrollador no opera servidores de cuentas, servidores de analítica ni SDKs de publicidad. Nunca recibimos tus fotos, vídeos ni ubicación.</p>
+
+    <h2>3. Datos procesados localmente en el dispositivo</h2>
+    <table>
+      <thead><tr><th>Tipo de datos</th><th>Propósito</th><th>Ubicación</th></tr></thead>
+      <tbody>
+        <tr><td>Fotos, vídeos y Live Photos</td><td>Visualización, reproducción, favoritos y solicitud de eliminación</td><td>Fototeca del sistema y caché temporal</td></tr>
+        <tr><td>Fecha, dimensiones, EXIF y GPS</td><td>Información multimedia, navegación por fecha y agrupación</td><td>Memoria o entorno local de la app</td></tr>
+        <tr><td>Historial de limpieza y estado PRO</td><td>Seguimiento del progreso y desbloqueo de funciones</td><td>Apple StoreKit y entorno local</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. Permisos del sistema</h2>
+    <ul>
+      <li><strong>Acceso a fotos:</strong> Requerido exclusivamente para organizar y solicitar eliminación con confirmación del usuario.</li>
+      <li><strong>Permisos no utilizados:</strong> No se solicitan permisos de micrófono, cámara, contactos ni ubicación del sistema.</li>
+    </ul>
+
+    <h2>5. Contacto</h2>
+    <p>Para dudas de privacidad: <a href="mailto:961819912@qq.com">961819912@qq.com</a>.</p>
+
+    <footer>© 2026 LeftSwipe Team · Bundle ID: com.cornpiess.hairball</footer>
+  </div>
+</main>
+
+<script>
+  const supportedLangs = ['zh-Hans', 'zh-Hant', 'en', 'ja', 'ko', 'es'];
+
+  function setLanguage(lang) {
+    let target = lang;
+    if (!supportedLangs.includes(target)) {
+      if (target.startsWith('zh-Hant') || target === 'zh-TW' || target === 'zh-HK' || target === 'zh-MO') {
+        target = 'zh-Hant';
+      } else if (target.startsWith('zh')) {
+        target = 'zh-Hans';
+      } else if (target.startsWith('ja')) {
+        target = 'ja';
+      } else if (target.startsWith('ko')) {
+        target = 'ko';
+      } else if (target.startsWith('es')) {
+        target = 'es';
+      } else {
+        target = 'en';
+      }
+    }
+
+    document.querySelectorAll('.lang-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+    
+    const targetContent = document.getElementById('content-' + target);
+    const targetBtn = document.getElementById('btn-' + target);
+    
+    if (targetContent) targetContent.classList.add('active');
+    if (targetBtn) targetBtn.classList.add('active');
+    document.documentElement.lang = target;
+    try {
+      localStorage.setItem('preferred_lang', target);
+    } catch (e) {}
+  }
+
+  (function initLanguage() {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const paramLang = urlParams.get('lang');
+      const savedLang = localStorage.getItem('preferred_lang');
+      
+      if (paramLang) {
+        setLanguage(paramLang);
+        return;
+      }
+      if (savedLang) {
+        setLanguage(savedLang);
+        return;
+      }
+      const browserLang = navigator.language || navigator.userLanguage || '';
+      setLanguage(browserLang);
+    } catch (e) {
+      setLanguage('zh-Hans');
+    }
+  })();
+</script>
+</body>
+</html>

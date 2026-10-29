@@ -1,0 +1,38 @@
+name: iOS release build (EAS)
+
+# Manual release gate: runs the full test suite, then triggers an EAS cloud
+# build of the production profile (optionally auto-submitting to TestFlight).
+# Requires the EXPO_TOKEN secret (expo.dev -> Account Settings -> Access Tokens).
+on:
+  workflow_dispatch:
+    inputs:
+      auto-submit:
+        description: Auto-submit the build to TestFlight
+        type: boolean
+        default: true
+
+concurrency:
+  group: ios-release-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+      - name: EAS build (production)
+        run: |
+          ARGS="--platform ios --profile production --non-interactive"
+          if [ "${{ inputs.auto-submit }}" = "true" ]; then
+            ARGS="$ARGS --auto-submit"
+          fi
+          npx eas-cli@26.0.0 build $ARGS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

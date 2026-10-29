@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>毛球 - 技术支持与帮助中心 | LeftSwipe - Support</title>
+    <style>
+        :root {
+            --bg-color: #0d0f12;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --accent-color: #e0aaff;
+            --border-color: rgba(255, 255, 255, 0.1);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.6;
+            margin: 0;
+            padding: 24px 16px;
+        }
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 32px 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        .lang-switch {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 6px;
+            margin-bottom: 24px;
+        }
+        .lang-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 5px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .lang-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+        }
+        .lang-btn.active {
+            background: var(--accent-color);
+            color: #0d0f12;
+            border-color: var(--accent-color);
+        }
+        .lang-content {
+            display: none;
+        }
+        .lang-content.active {
+            display: block;
+        }
+        h1 {
+            font-size: 26px;
+            font-weight: 800;
+            margin-top: 0;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 16px;
+        }
+        h2 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-top: 28px;
+            color: #e0aaff;
+        }
+        p, li {
+            color: var(--text-secondary);
+            font-size: 15px;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 12px 0;
+        }
+        .card h3 {
+            margin-top: 0;
+            color: #fff;
+            font-size: 16px;
+        }
+        .card p {
+            margin-bottom: 0;
+        }
+        .footer {
+            margin-top: 40px;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.4);
+            text-align: center;
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 6 语言切换菜单 -->
+        <div class="lang-switch">
+            <button id="btn-zh-Hans" class="lang-btn" onclick="setLanguage('zh-Hans')">简体中文</button>
+            <button id="btn-zh-Hant" class="lang-btn" onclick="setLanguage('zh-Hant')">繁體中文</button>
+            <button id="btn-en" class="lang-btn" onclick="setLanguage('en')">English</button>
+            <button id="btn-ja" class="lang-btn" onclick="setLanguage('ja')">日本語</button>
+            <button id="btn-ko" class="lang-btn" onclick="setLanguage('ko')">한국어</button>
+            <button id="btn-es" class="lang-btn" onclick="setLanguage('es')">Español</button>
+        </div>
+
+        <!-- 1. 简体中文 (zh-Hans) -->
+        <div id="content-zh-Hans" class="lang-content active">
+            <h1>毛球 - 帮助与技术支持</h1>
+            <p>欢迎来到“毛球”技术支持页面。如果您在使用应用过程中遇到任何问题、遇到 Bug 或有功能建议，我们随时为您提供帮助。</p>
+
+            <h2>常见问题解答 (FAQ)</h2>
+            
+            <div class="card">
+                <h3>Q1: “毛球”会上传我的照片到服务器吗？</h3>
+                <p>答：不会。“毛球”采用 100% 本地分析引擎，所有照片读取、整理与删除均在您的 iPhone 本地运行，绝不上传任何照片数据。</p>
+            </div>
+
+            <div class="card">
+                <h3>Q2: 误删的照片如何找回？</h3>
+                <p>答：在“毛球”中点击移入待删相册的照片，可随时在【待删相册】页面点击【恢复】。若已在待删相册中彻底确认清理，也可在 iPhone 的【照片】App ➔【最近删除】相册中 30 天内恢复。</p>
+            </div>
+
+            <div class="card">
+                <h3>Q3: 换了新手机后如何恢复 PRO 会员？</h3>
+                <p>答：只需在应用右上角菜单或会员弹窗中，点击【恢复购买】按钮，系统会自动识别您的 Apple ID 并恢复您的 PRO 权益。</p>
+            </div>
+
+            <h2>官方联系方式与客服支持</h2>
+            <p>如果您遇到了其他问题，欢迎直接通过电子邮件与开发者联系：</p>
+            <ul>
+                <li><strong>技术支持邮箱</strong>：<a href="mailto:961819912@qq.com" style="color: #e0aaff;">961819912@qq.com</a></li>
+                <li><strong>响应时间</strong>：我们将在 24 小时内回复您的邮件。</li>
+            </ul>
+
+            <div class="footer">
+                &copy; 2026 毛球. 保留所有权利。
+            </div>
+        </div>
+
+        <!-- 2. 繁體中文 (zh-Hant) -->
+        <div id="content-zh-Hant" class="lang-content">
+            <h1>LeftSwipe - 幫助與技術支援</h1>
+            <p>歡迎來到「LeftSwipe」技術支援頁面。如果您在使用應用程式過程中遇到任何問題、Bug 或有功能建議，我們隨時為您提供協助。</p>
+
+            <h2>常見問題解答 (FAQ)</h2>
+            
+            <div class="card">
+                <h3>Q1: 「LeftSwipe」會上傳我的照片到伺服器嗎？</h3>
+                <p>答：不會。「LeftSwipe」採用 100% 本地分析引擎，所有照片讀取、整理與刪除均在您的 iPhone 本地運行，絕不上傳任何照片資料。</p>
+            </div>
+
+            <div class="card">
+                <h3>Q2: 誤刪的照片如何找回？</h3>
+                <p>答：在「LeftSwipe」中移入待删相册的照片，可隨時在【待删相册】頁面點擊【復原】。若已在待删相册中徹底確認清理，亦可在 iPhone 的【照片】App ➔【最近刪除】相簿中 30 天內復原。</p>
+            </div>
+
+            <div class="card">
+                <h3>Q3: 換了新手機後如何恢復 PRO 會員？</h3>
+                <p>答：只需在應用程式右上角選單或會員彈窗中，點擊【恢復購買】按鈕，系統會自動辨識您的 Apple ID 並立即恢復您的 PRO 權益。</p>
+            </div>
+
+            <h2>官方聯絡方式與客服支援</h2>
+            <p>如果您遇到了其他問題，歡迎直接透過電子郵件與開發者聯絡：</p>
+            <ul>
+                <li><strong>技術支援信箱</strong>：<a href="mailto:961819912@qq.com" style="color: #e0aaff;">961819912@qq.com</a></li>
+                <li><strong>回覆時間</strong>：我們將在 24 小時內回覆您的信件。</li>
+            </ul>
+
+            <div class="footer">
+                &copy; 2026 LeftSwipe. 保留所有權利。
+            </div>
+        </div>
+
+        <!-- 3. English (en) -->
+        <div id="content-en" class="lang-content">
+            <h1>LeftSwipe - Help & Support</h1>
+            <p>Welcome to the LeftSwipe Support Center. If you have any questions, encounter issues, or have feature suggestions, we are always here to help.</p>
+
+            <h2>Frequently Asked Questions (FAQ)</h2>
+            
+            <div class="card">
+                <h3>Q1: Does LeftSwipe upload my photos to any server?</h3>
+                <p>Answer: No. LeftSwipe is powered by a 100% on-device processing engine. All photo browsing, organizing, and deletion take place strictly locally on your iPhone. Your media never leaves your device.</p>
+            </div>
+
+            <div class="card">
+                <h3>Q2: How can I recover accidentally deleted photos?</h3>
+                <p>Answer: Photos moved to the Review Bin can be restored at any time prior to final confirmation by tapping "Restore". Even after you confirm deletion in LeftSwipe, iOS moves them to the "Recently Deleted" album in Apple Photos, where you can still recover them within 30 days.</p>
+            </div>
+
+            <div class="card">
+                <h3>Q3: How do I restore my PRO membership on a new device?</h3>
+                <p>Answer: Simply open the top-right menu or any membership prompt in the app, and tap "Restore Purchases". Apple StoreKit will verify your Apple ID and instantly restore your PRO access.</p>
+            </div>
+
+            <h2>Official Contact & Customer Support</h2>
+            <p>If you encounter any other issues or inquiries, please feel free to email the developer directly:</p>
+            <ul>
+                <li><strong>Support Email</strong>: <a href="mailto:961819912@qq.com" style="color: #e0aaff;">961819912@qq.com</a></li>
+                <li><strong>Response Time</strong>: We will respond to your inquiry within 24 hours.</li>
+            </ul>
+
+            <div class="footer">
+                &copy; 2026 LeftSwipe. All rights reserved.
+            </div>
+        </div>
+
+        <!-- 4. 日本語 (ja) -->
+        <div id="content-ja" class="lang-content">
+            <h1>LeftSwipe - ヘルプ＆サポート</h1>
+            <p>「LeftSwipe」サポートページへようこそ。アプリの使用中に問題が発生した場合や、機能に関するご要望がございましたら、いつでもお気軽にお問い合わせください。</p>
+
+            <h2>よくあるご質問 (FAQ)</h2>
+            
+            <div class="card">
+                <h3>Q1: 写真が外部サーバーにアップロードされることはありますか？</h3>
+                <p>回答：いいえ、一切ありません。「LeftSwipe」は100%端末内処理エンジンを採用しており、写真の読み込み、整理、削除のすべてがお使いのiPhone本体内でのみ安全に動作します。</p>
+            </div>
+
+            <div class="card">
+                <h3>Q2: 誤って削除した写真は復元できますか？</h3>
+                <p>回答：「レビューボックス」に移動した写真は、完全削除を確定する前であればいつでも【復元】できます。また、LeftSwipe内で削除を確定した場合でも、iOS「写真」アプリの【最近削除した項目】に移動するため、30日以内であれば復元可能です。</p>
+            </div>
+
+            <div class="card">
+                <h3>Q3: 機種変更後にPROメンバーシップを復元する方法は？</h3>
+                <p>回答：アプリ右上の設定メニュー、またはPRO案内画面の【購入の復元】ボタンをタップしてください。Apple IDが確認され、すぐにPRO特典が復元されます。</p>
+            </div>
+
+            <h2>公式お問い合わせ窓口</h2>
+            <p>その他ご不明な点やフィードバックがございましたら、開発者まで直接メールでお知らせください：</p>
+            <ul>
+                <li><strong>サポートメール</strong>：<a href="mailto:961819912@qq.com" style="color: #e0aaff;">961819912@qq.com</a></li>
+                <li><strong>対応時間</strong>：通常24時間以内にご返信いたします。</li>
+            </ul>
+
+            <div class="footer">
+                &copy; 2026 LeftSwipe. All rights reserved.
+            </div>
+        </div>
+
+        <!-- 5. 한국어 (ko) -->
+        <div id="content-ko" class="lang-content">
+            <h1>LeftSwipe - 도움말 및 지원</h1>
+            <p>LeftSwipe 고객지원 페이지에 오신 것을 환영합니다. 앱 사용 중 발생한 문제나 버그, 또는 기능 제안이 있으시면 언제든지 문의해 주세요.</p>
+
+            <h2>자주 묻는 질문 (FAQ)</h2>
+            
+            <div class="card">
+                <h3>Q1: LeftSwipe가 내 사진을 서버로 업로드하나요?</h3>
+                <p>답변: 아니요. LeftSwipe는 100% 온디바이스 로컬 분석 엔진으로 구동됩니다. 모든 사진 탐색, 정리 및 삭제는 iPhone 내부에서만 이루어지며, 사진 데이터가 외부로 전송되지 않습니다.</p>
+            </div>
+
+            <div class="card">
+                <h3>Q2: 실수로 삭제한 사진을 복구할 수 있나요?</h3>
+                <p>답변: LeftSwipe 보관함에 넣은 사진은 최종 정리 확인 전까지 언제든지 [복원]할 수 있습니다. 또한 LeftSwipe에서 영구 삭제를 확정하더라도 iOS [사진] 앱의 [최근 삭제된 항목]으로 이동하므로 30일 이내에 복원할 수 있습니다.</p>
+            </div>
+
+            <div class="card">
+                <h3>Q3: 기기 변경 후 PRO 멤버십을 어떻게 복원하나요?</h3>
+                <p>답변: 앱 우측 상단 메뉴 또는 멤버십 안내 화면에서 [구매 복원]을 탭하기만 하면 됩니다. Apple ID 인증을 통해 즉시 PRO 혜택이 복원됩니다.</p>
+            </div>
+
+            <h2>공식 고객지원 문의</h2>
+            <p>기타 문의 사항이나 피드백이 있으시면 개발자에게 이메일로 연락해 주시기 바랍니다:</p>
+            <ul>
+                <li><strong>고객지원 이메일</strong>: <a href="mailto:961819912@qq.com" style="color: #e0aaff;">961819912@qq.com</a></li>
+                <li><strong>응답 시간</strong>: 24시간 이내에 답변해 드립니다.</li>
+            </ul>
+
+            <div class="footer">
+                &copy; 2026 LeftSwipe. All rights reserved.
+            </div>
+        </div>
+
+        <!-- 6. Español (es) -->
+        <div id="content-es" class="lang-content">
+            <h1>LeftSwipe - Ayuda y Soporte</h1>
+            <p>Bienvenido al Centro de Soporte de LeftSwipe. Si tienes alguna pregunta, encuentras algún error o tienes sugerencias sobre la app, estamos a tu disposición.</p>
+
+            <h2>Preguntas Frecuentes (FAQ)</h2>
+            
+            <div class="card">
+                <h3>Q1: ¿LeftSwipe sube mis fotos a algún servidor?</h3>
+                <p>Respuesta: No. LeftSwipe funciona con un motor de procesamiento 100% local en tu dispositivo. Toda la navegación, organización y eliminación de fotos se realiza exclusivamente en tu iPhone. Ningún dato multimedia se sube jamás.</p>
+            </div>
+
+            <div class="card">
+                <h3>Q2: ¿Cómo puedo recuperar fotos eliminadas por error?</h3>
+                <p>Respuesta: Las fotos enviadas a la caja de revisión de LeftSwipe se pueden restaurar en cualquier momento antes de la confirmación tocando "Restaurar". Incluso tras confirmar la eliminación, iOS las traslada al álbum "Eliminado" en Fotos de Apple, donde puedes recuperarlas durante 30 días.</p>
+            </div>
+
+            <div class="card">
+                <h3>Q3: ¿Cómo restauro mi membresía PRO en un nuevo dispositivo?</h3>
+                <p>Respuesta: Simplemente abre el menú superior derecho o cualquier aviso de suscripción en la app y toca "Restaurar compras". Apple StoreKit verificará tu Apple ID y restaurará tus beneficios PRO al instante.</p>
+            </div>
+
+            <h2>Contacto Oficial y Soporte</h2>
+            <p>Si tienes alguna otra pregunta o comentario, no dudes en escribir directamente al desarrollador:</p>
+            <ul>
+                <li><strong>Correo de soporte</strong>: <a href="mailto:961819912@qq.com" style="color: #e0aaff;">961819912@qq.com</a></li>
+                <li><strong>Tiempo de respuesta</strong>: Responderemos a tu mensaje en menos de 24 horas.</li>
+            </ul>
+
+            <div class="footer">
+                &copy; 2026 LeftSwipe. Todos los derechos reservados.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const supportedLangs = ['zh-Hans', 'zh-Hant', 'en', 'ja', 'ko', 'es'];
+
+        function setLanguage(lang) {
+            let target = lang;
+            if (!supportedLangs.includes(target)) {
+                if (target.startsWith('zh-Hant') || target === 'zh-TW' || target === 'zh-HK' || target === 'zh-MO') {
+                    target = 'zh-Hant';
+                } else if (target.startsWith('zh')) {
+                    target = 'zh-Hans';
+                } else if (target.startsWith('ja')) {
+                    target = 'ja';
+                } else if (target.startsWith('ko')) {
+                    target = 'ko';
+                } else if (target.startsWith('es')) {
+                    target = 'es';
+                } else {
+                    target = 'en';
+                }
+            }
+
+            document.querySelectorAll('.lang-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            
+            const targetContent = document.getElementById('content-' + target);
+            const targetBtn = document.getElementById('btn-' + target);
+            
+            if (targetContent) targetContent.classList.add('active');
+            if (targetBtn) targetBtn.classList.add('active');
+            document.documentElement.lang = target;
+            try {
+                localStorage.setItem('preferred_lang', target);
+            } catch (e) {}
+        }
+
+        (function initLanguage() {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const paramLang = urlParams.get('lang');
+                const savedLang = localStorage.getItem('preferred_lang');
+                
+                if (paramLang) {
+                    setLanguage(paramLang);
+                    return;
+                }
+                if (savedLang) {
+                    setLanguage(savedLang);
+                    return;
+                }
+                const browserLang = navigator.language || navigator.userLanguage || '';
+                setLanguage(browserLang);
+            } catch (e) {
+                setLanguage('zh-Hans');
+            }
+        })();
+    </script>
+</body>
+</html>
