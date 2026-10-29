@@ -17,6 +17,7 @@ jobs:
       - run: npx expo export --platform ios
   native-photo-policy:
     runs-on: macos-15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - name: Compile and exercise actual Swift scheduling policy
@@ -25,6 +26,10 @@ jobs:
           /tmp/photo-policy-tests
       - name: Check native source syntax
         run: xcrun swiftc -frontend -parse modules/maoqiu-photo-preview/ios/*.swift
+      - name: Typecheck PhotoKit scheduler with the iOS simulator SDK
+        run: |
+          SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun swiftc -typecheck -sdk "$SDK" -target arm64-apple-ios16.4-simulator modules/maoqiu-photo-preview/ios/PhotoRequestPolicy.swift modules/maoqiu-photo-preview/ios/PhotoResources.swift
       - uses: actions/setup-node@v7
         with:
           node-version: 24
