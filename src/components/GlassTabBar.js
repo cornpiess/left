@@ -5,27 +5,23 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
+import { MOTION, fadeMotion, useReducedMotion } from '../motion';
 
 function GlassTabItem({ route, focused, onPress }) {
   const bounce = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    Animated.spring(bounce, {
-      toValue: focused ? 1 : 0,
-      useNativeDriver: true,
-      friction: 4,
-      tension: 190,
-    }).start();
-  }, [focused, bounce]);
+    const anim = fadeMotion(bounce, focused ? 1 : 0, reduceMotion ? MOTION.reducedMs : MOTION.fadeMs);
+    anim.start();
+    return () => anim.stop();
+  }, [focused, bounce, reduceMotion]);
 
   const focusedIcon = route.name === '回忆' ? 'time' : 'trash';
   const outlineIcon = route.name === '回忆' ? 'time-outline' : 'trash-outline';
 
   const pillOpacity = bounce.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-  const lift = bounce.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
-  const pillScale = bounce.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] });
-  const iconScale = bounce.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] });
-  const textScale = bounce.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
+  const pillScale = bounce.interpolate({ inputRange: [0, 1], outputRange: reduceMotion ? [1, 1] : [MOTION.pressScale, 1] });
 
   return (
     <Pressable style={styles.item} onPress={onPress} hitSlop={6}>
@@ -34,7 +30,7 @@ function GlassTabItem({ route, focused, onPress }) {
           styles.itemPill,
           {
             opacity: pillOpacity,
-            transform: [{ translateY: lift }, { scale: pillScale }],
+            transform: [{ scale: pillScale }],
           },
         ]}
       >
@@ -45,7 +41,7 @@ function GlassTabItem({ route, focused, onPress }) {
           end={{ x: 0.8, y: 1 }}
         />
       </Animated.View>
-      <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+      <Animated.View>
         <Ionicons
           name={focused ? focusedIcon : outlineIcon}
           size={22}
@@ -53,7 +49,7 @@ function GlassTabItem({ route, focused, onPress }) {
         />
       </Animated.View>
       <Animated.Text
-        style={[styles.label, { color: focused ? colors.text : colors.textMuted, transform: [{ scale: textScale }] }]}
+        style={[styles.label, { color: focused ? colors.text : colors.textMuted }]}
       >
         {route.name}
       </Animated.Text>

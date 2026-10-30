@@ -18,6 +18,7 @@ import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, formatBytes } from '../theme';
+import { beginMotionDrag, moveMotionDrag, exitMotion, settleMotion, useReducedMotion } from '../motion';
 import { GlassPanel, JellyPressable } from './Glass';
 import { emptyTrash, fetchTrashSummary, fetchTrashItems, getAssetSizeBytes, getDisplayUri, getUriFallback, isVideoAsset, loadExif, restoreFromTrash } from '../media';
 import { getRenderableImageUri } from '../mediaPage.mjs';
@@ -99,6 +100,7 @@ function exifValue(exif, ...keys) {
 export default function TrashGallery({ visible, onClose, onChanged }) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const reduceMotion = useReducedMotion();
   const [items, setItems] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const pageLoadingRef = useRef(false);
@@ -113,6 +115,7 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
   const deletingRef = useRef(false);
   const refreshVersionRef = useRef(0);
   const dismissY = useRef(new Animated.Value(0)).current;
+  const dismissDrag = useRef({ version: 0, position: 0, min: 0, dragging: false, ready: false }).current;
   const dismissingRef = useRef(false);
   // Video covers that already went through thumbnail generation (success or
   // failure). Retrying on every refresh re-ran heavy AVAsset jobs for videos
@@ -120,43 +123,44 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
   const coverAttemptedRef = useRef(new Set());
   const { t, formatLocalizedDate } = useI18n();
 
-  const closeFromDrag = useCallback(() => {
+  const closeFromDrag = useCallback((position, velocity) => {
     if (dismissingRef.current || deletingRef.current) return;
     dismissingRef.current = true;
-    Animated.timing(dismissY, {
-      toValue: height,
-      duration: 190,
-      useNativeDriver: true,
-    }).start(() => {
+    const version = dismissDrag.version;
+    exitMotion(dismissY, position, Math.max(height, position), velocity, reduceMotion).start(({ finished }) => {
+      if (!finished || dismissDrag.version !== version) return;
       dismissY.setValue(0);
       dismissingRef.current = false;
       onClose?.();
     });
-  }, [dismissY, height, onClose]);
+  }, [dismissY, height, onClose, dismissDrag, reduceMotion]);
 
   const closePanResponder = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gestureState) =>
-          gestureState.dy > 8 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
-        onPanResponderMove: (_, gestureState) => dismissY.setValue(Math.max(0, gestureState.dy)),
-        onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dy > 96 || gestureState.vy > 1.05) {
-            closeFromDrag();
+          !dismissingRef.current && !deletingRef.current && gestureState.dy > 8 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
+        onPanResponderGrant: (_, g) => beginMotionDrag(dismissY, dismissDrag, Math.max(0, g.dy)),
+        onPanResponderMove: (_, gestureState) => moveMotionDrag(dismissY, dismissDrag, Math.max(0, gestureState.dy)),
+        onPanResponderRelease: (event, gestureState) => {
+          if (!dismissDrag.ready) {
+            const released = { ...gestureState };
+            dismissDrag.onReady = () => closePanResponder.panHandlers.onPanResponderRelease(event, released);
             return;
           }
-          Animated.spring(dismissY, {
-            toValue: 0,
-            useNativeDriver: true,
-            speed: 22,
-            bounciness: 5,
-          }).start();
+          dismissDrag.dragging = false;
+          if (gestureState.dy > 96 || gestureState.vy > 1.05) {
+            closeFromDrag(dismissDrag.position, gestureState.vy);
+            return;
+          }
+          settleMotion(dismissY, 0, { velocity: gestureState.vy, reduced: reduceMotion }).start();
         },
         onPanResponderTerminate: () => {
-          Animated.spring(dismissY, { toValue: 0, useNativeDriver: true }).start();
+          dismissDrag.dragging = false;
+          settleMotion(dismissY, 0, { reduced: reduceMotion }).start();
         },
       }),
-    [closeFromDrag, dismissY]
+    [closeFromDrag, dismissY, dismissDrag, reduceMotion]
   );
 
   const refresh = useCallback(async () => {
@@ -280,47 +284,67 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
 
   const previewListRef = useRef(null);
   const previewDismissY = useRef(new Animated.Value(0)).current;
+  const previewDrag = useRef({ version: 0, position: 0, min: 0, dragging: false, ready: false }).current;
+  const previewDismissing = useRef(false);
+
+  useEffect(() => () => {
+    dismissDrag.version++;
+    dismissDrag.dragging = false;
+    dismissY.stopAnimation();
+    dismissY.setValue(0);
+    dismissingRef.current = false;
+  }, [visible, dismissY, dismissDrag]);
+  useEffect(() => () => {
+    previewDrag.version++;
+    previewDrag.dragging = false;
+    previewDismissY.stopAnimation();
+    previewDismissY.setValue(0);
+    previewDismissing.current = false;
+  }, [visible, previewIndex, previewDismissY, previewDrag]);
 
   const previewVerticalPan = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gestureState) =>
-          (gestureState.dy > 10 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 1.15) ||
-          (gestureState.dy < -16 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 1.5),
+          !previewDismissing.current && ((gestureState.dy > 10 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 1.15) ||
+          (gestureState.dy < -16 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 1.5)),
+        onPanResponderGrant: (_, g) => beginMotionDrag(previewDismissY, previewDrag, Math.max(0, g.dy)),
         onPanResponderMove: (_, gestureState) => {
           if (gestureState.dy > 0) {
-            previewDismissY.setValue(gestureState.dy);
+            moveMotionDrag(previewDismissY, previewDrag, gestureState.dy);
           }
         },
-        onPanResponderRelease: (_, gestureState) => {
+        onPanResponderRelease: (event, gestureState) => {
+          if (!previewDrag.ready) {
+            const released = { ...gestureState };
+            previewDrag.onReady = () => previewVerticalPan.panHandlers.onPanResponderRelease(event, released);
+            return;
+          }
+          previewDrag.dragging = false;
           if (gestureState.dy > 45 || gestureState.vy > 0.5) {
-            Animated.timing(previewDismissY, {
-              toValue: height,
-              duration: 180,
-              useNativeDriver: true,
-            }).start(() => {
+            previewDismissing.current = true;
+            const version = previewDrag.version;
+            exitMotion(previewDismissY, previewDrag.position, Math.max(height, previewDrag.position), gestureState.vy, reduceMotion).start(({ finished }) => {
+              if (!finished || previewDrag.version !== version) return;
               setPreviewDetails(false);
               setPreviewIndex(null);
               previewDismissY.setValue(0);
+              previewDismissing.current = false;
             });
             return;
           }
-          Animated.spring(previewDismissY, {
-            toValue: 0,
-            useNativeDriver: true,
-            speed: 22,
-            bounciness: 4,
-          }).start();
+          settleMotion(previewDismissY, 0, { velocity: gestureState.vy, reduced: reduceMotion }).start();
 
           if (gestureState.dy < -35) {
             setPreviewDetails(true);
           }
         },
         onPanResponderTerminate: () => {
-          Animated.spring(previewDismissY, { toValue: 0, useNativeDriver: true }).start();
+          previewDrag.dragging = false;
+          settleMotion(previewDismissY, 0, { reduced: reduceMotion }).start();
         },
       }),
-    [height, previewDismissY]
+    [height, previewDismissY, previewDrag, reduceMotion]
   );
 
   const cell = Math.floor((width - 8) / 3) - 8;

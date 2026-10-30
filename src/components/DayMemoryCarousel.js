@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, AppState, Easing, FlatList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Animated, AppState, FlatList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,9 +12,11 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { useI18n } from '../i18n';
 import { isVideoAsset } from '../media';
 import useScrollLiveness from '../useScrollLiveness';
+import { MOTION, exitMotion, fadeMotion, settleMotion, useReducedMotion } from '../motion';
 
 export default function DayMemoryCarousel({ items, initialIndex = 0, loading, onExit, onTrash, onPrepareTrash, onViewed, paused = false, onWindowIndexChange, onInteractionChange, constrained = false, onLoadBefore, onLoadAfter, hasBefore = false, hasAfter = false }) {
   const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const reduceMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const listRef = useRef(null);
   const [storedIndex, setActiveIndex] = useState(initialIndex);
@@ -196,18 +198,24 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
 
   const trashAnim = useRef(new Animated.Value(0)).current;
   const btnPulse = useRef(new Animated.Value(1)).current;
+  const motionVersion = useRef(0);
+  useEffect(() => () => {
+    motionVersion.current++;
+    trashAnim.stopAnimation();
+    btnPulse.stopAnimation();
+  }, [trashAnim, btnPulse]);
 
   const cardFlyScale = trashAnim.interpolate({
     inputRange: [0, 0.55, 1],
-    outputRange: [1, 0.5, 0.08],
+    outputRange: reduceMotion ? [1, 1, 1] : [1, 0.5, 0.08],
   });
   const cardFlyTranslateY = trashAnim.interpolate({
     inputRange: [0, 0.55, 1],
-    outputRange: [0, 90, 260],
+    outputRange: reduceMotion ? [0, 0, 0] : [0, 90, 260],
   });
   const cardFlyRotate = trashAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '-14deg'],
+    outputRange: ['0deg', reduceMotion ? '0deg' : `-${MOTION.dayTilt}deg`],
   });
   const cardFlyOpacity = trashAnim.interpolate({
     // Stay fully visible while it shrinks and falls, then fade out only at the
@@ -225,9 +233,10 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
     const targetItem = availableItems.find((it) => it.id === currentItem?.id) || availableItems[0];
     if (!targetItem) return;
 
-    if (!(await prepareDayTrash(targetItem))) return;
+    const version = motionVersion.current;
+    if (!(await prepareDayTrash(targetItem)) || motionVersion.current !== version) return;
     pendingTrashIdsRef.current.add(targetItem.id);
-    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
 
     if (activeVideoPlayerRef.current?.player) {
       try {
@@ -238,30 +247,24 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
     setActiveVideoPlayer(null);
     setCardZoomed(false);
 
-    // Play the "card flies into the Hairball" animation FIRST so the user can
-    // see it. The item is only marked as trashed (which is what bumps the
-    // Hairball count / persists) once the flight has finished — exactly once,
-    // via handleCardTrash -> parent onTrash. Moving it immediately instead
-    // would unmount the card before a single animation frame is drawn.
-    Animated.parallel([
-      Animated.timing(trashAnim, {
-        toValue: 1,
-        duration: 240,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.sequence([
-        Animated.timing(btnPulse, { toValue: 1.25, duration: 110, useNativeDriver: true }),
-        Animated.timing(btnPulse, { toValue: 1.0, duration: 130, useNativeDriver: true }),
-      ]),
-    ]).start(() => {
+    // The pending selection is already durable. Only presentation removal
+    // waits for the card's exit so it isn't unmounted before its first frame.
+    // The pulse is decorative and never delays the next cleanup operation.
+    btnPulse.stopAnimation();
+    Animated.sequence([
+      fadeMotion(btnPulse, reduceMotion ? 1 : MOTION.pulseScale, MOTION.reducedMs),
+      settleMotion(btnPulse, 1, { reduced: reduceMotion, scale: true }),
+    ]).start();
+    // Normalized progress drives a 260pt path, sharing the swipe exit family.
+    exitMotion(trashAnim, 0, 1, 0, reduceMotion, 260).start(({ finished }) => {
+      if (!finished || motionVersion.current !== version) return;
       trashAnim.setValue(0);
       setTrashingId(null);
       pendingTrashIdsRef.current.delete(targetItem.id);
       handleCardTrash(targetItem);
       isTrashingRef.current = false;
     });
-  }, [safeItems, currentItem, handleCardTrash, trashAnim, btnPulse, prepareDayTrash]);
+  }, [safeItems, currentItem, handleCardTrash, trashAnim, btnPulse, prepareDayTrash, reduceMotion]);
 
   const getItemLayout = useCallback(
     (_, index) => ({ length: interval, offset: interval * index, index }),
@@ -391,7 +394,7 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
 
       {/* Bottom Bar */}
       <View style={[styles.bottomBar, { bottom: insets.bottom + 12 }]} pointerEvents="box-none">
-        <JellyPressable onPress={handleTrashCurrent} hitSlop={10}>
+        <JellyPressable onPress={handleTrashCurrent} hitSlop={10} haptic={false}>
           <Animated.View style={{ transform: [{ scale: btnPulse }] }}>
             <GlassPanel style={styles.trashBtn} radius={23} intensity={65}>
               <MaoQiuIcon size={29} color={colors.white} />

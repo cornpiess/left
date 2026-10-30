@@ -10,6 +10,7 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
+import { MOTION, settleMotion, useReducedMotion } from '../motion';
 
 /**
  * GlassPanel — MD3 Tonal Surface
@@ -64,16 +65,14 @@ export function GlassPanel({
 }
 
 /**
- * JellyPressable — MD3 Expressive Spring Physics
- * Press In:  tension=340, friction=35 (tight snap)
- * Press Out: tension=200, friction=22 (organic overshoot rebound)
+ * JellyPressable — small, immediate compression with a quiet shared return.
  */
 export function JellyPressable({
   children,
   onPress,
   onLongPress,
   style,
-  scaleTo = 0.94,
+  scaleTo = MOTION.pressScale,
   haptic = true,
   disabled = false,
   hitSlop,
@@ -81,29 +80,19 @@ export function JellyPressable({
   accessibilityLabel,
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const reduceMotion = useReducedMotion();
 
   const handlePressIn = useCallback(() => {
     if (disabled) return;
     if (haptic) {
       try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     }
-    Animated.spring(scaleAnim, {
-      toValue: scaleTo,
-      tension: 340,
-      friction: 35,
-      useNativeDriver: true,
-    }).start();
-  }, [disabled, haptic, scaleAnim, scaleTo]);
+    settleMotion(scaleAnim, reduceMotion ? 1 : scaleTo, { reduced: reduceMotion, scale: true }).start();
+  }, [disabled, haptic, scaleAnim, scaleTo, reduceMotion]);
 
   const handlePressOut = useCallback(() => {
-    if (disabled) return;
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      tension: 200,
-      friction: 22,
-      useNativeDriver: true,
-    }).start();
-  }, [disabled, scaleAnim]);
+    settleMotion(scaleAnim, 1, { reduced: reduceMotion, scale: true }).start();
+  }, [scaleAnim, reduceMotion]);
 
   const isAbsolute = style?.position === 'absolute';
   const pressableStyle = isAbsolute

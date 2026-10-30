@@ -1,4 +1,6 @@
 import { SWIPE_COMMIT } from '../gestureContract.mjs';
+import { MOTION, beginMotionDrag, moveMotionDrag, exitMotion, fadeMotion, settleMotion, useReducedMotion } from '../motion';
+import useBurstMotion from '../useBurstMotion';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -668,6 +670,7 @@ function MemoryCard({
   const insets = useSafeAreaInsets();
   const { width: winWidth } = useWindowDimensions();
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
 
   const isVideo = isVideoAsset(item);
   const isLive = !!item?.isLive;
@@ -697,11 +700,6 @@ function MemoryCard({
     if (active && displayedMediaId === item?.id) onMediaReady?.(item);
   }, [active, displayedMediaId, item?.id, onMediaReady]);
   const burstDirectionRef = useRef(0);
-  const burstSlideX = useRef(new Animated.Value(0)).current;
-  const burstSlideY = useRef(new Animated.Value(0)).current;
-  const burstDeckScale = useRef(new Animated.Value(1)).current;
-  const burstDeckRotate = useRef(new Animated.Value(0)).current;
-  const burstDeckOpacity = useRef(new Animated.Value(1)).current;
 
   const translateX = useRef(new Animated.Value(0)).current;
   const favBurst = useRef(new Animated.Value(0)).current;
@@ -711,6 +709,10 @@ function MemoryCard({
   const pop = useRef(new Animated.Value(1)).current;
 
   const isBurst = groupCount > 1;
+  const burstPoses = useBurstMotion({
+    itemId: item?.id, enabled: isBurst && (active || preload),
+    directionRef: burstDirectionRef, reduced: reduceMotion || constrained,
+  });
   // Color is bound to the photo's stable in-group index (burstIndex), NOT the
   // viewing position (groupIndex), so each frame keeps its color across
   // frame switches, back-swipe review and feed rebuilds.
@@ -737,14 +739,14 @@ function MemoryCard({
     // is already 1, so re-running is a visual no-op (no flash).
     const anim = Animated.timing(burstDeckReveal, {
       toValue: 1,
-      duration: 200,
-      delay: 40,
+      duration: reduceMotion ? MOTION.reducedMs : MOTION.fadeMs,
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
+      isInteraction: false,
     });
     anim.start();
     return () => anim.stop();
-  }, [item?.id, burstChromeReady, burstDeckReveal]);
+  }, [item?.id, burstChromeReady, burstDeckReveal, reduceMotion]);
   // Player of the CURRENT card (video or live photo), kept so a gesture that
   // silenced audio at grant time can resume it when it ends without leaving.
   const cardPlayerRef = useRef(null);
@@ -825,15 +827,15 @@ function MemoryCard({
   const resetZoom = useCallback(() => {
     clearTimeout(longPressRef.current);
     Animated.parallel([
-      Animated.spring(zoomScale, { toValue: 1, useNativeDriver: true, friction: 7 }),
-      Animated.spring(zoomPanX, { toValue: 0, useNativeDriver: true, friction: 7 }),
-      Animated.spring(zoomPanY, { toValue: 0, useNativeDriver: true, friction: 7 }),
+      settleMotion(zoomScale, 1, { reduced: reduceMotion, scale: true }),
+      settleMotion(zoomPanX, 0, { reduced: reduceMotion }),
+      settleMotion(zoomPanY, 0, { reduced: reduceMotion }),
     ]).start();
     zoomStateRef.current.scale = 1;
     zoomStateRef.current.panX = 0;
     zoomStateRef.current.panY = 0;
     updateZoomed(false);
-  }, [zoomScale, zoomPanX, zoomPanY, updateZoomed]);
+  }, [zoomScale, zoomPanX, zoomPanY, updateZoomed, reduceMotion]);
 
   const zoomTapRef = useRef(0);
   const handleZoomDoubleTap = useCallback(() => {
@@ -883,70 +885,35 @@ function MemoryCard({
 
   }, [active, isBurst, items, groupIndex]);
 
-  // Q-bounce: gentle scale pop when card FIRST enters the preload window,
-  // NOT when it becomes active (avoids flash after delete-swipe transition).
+  // Quiet reveal when a card FIRST enters the preload window, never on
+  // activation (avoids a second pop after the previous card leaves).
   const wasPreloadedRef = useRef(false);
   useEffect(() => {
     if (isBurst) return;
     if (preload && !wasPreloadedRef.current) {
       wasPreloadedRef.current = true;
-      pop.setValue(0.97);
-      Animated.spring(pop, { toValue: 1, useNativeDriver: true, friction: 6, tension: 100 }).start();
+      pop.setValue(reduceMotion ? 1 : MOTION.burstScale);
+      settleMotion(pop, 1, { reduced: reduceMotion, scale: true }).start();
     }
     if (!preload && !active) {
       wasPreloadedRef.current = false;
     }
-  }, [preload, active, pop, isBurst, item?.id]);
-
-  useEffect(() => {
-    if (!burstDirectionRef.current) {
-      burstSlideX.setValue(0);
-      burstSlideY.setValue(0);
-      burstDeckScale.setValue(1);
-      burstDeckRotate.setValue(0);
-      burstDeckOpacity.setValue(1);
-      return;
-    }
-    const direction = burstDirectionRef.current;
-    burstDirectionRef.current = 0;
-
-    if (direction > 0) {
-      // Next (Down): new card rises up with high-speed native spring
-      burstSlideX.setValue(0);
-      burstSlideY.setValue(14);
-      burstDeckScale.setValue(0.98);
-      burstDeckRotate.setValue(-1);
-      burstDeckOpacity.setValue(0.9);
-
-      Animated.parallel([
-        Animated.spring(burstSlideY, { toValue: 0, useNativeDriver: true, speed: 45, bounciness: 4 }),
-        Animated.spring(burstDeckScale, { toValue: 1, useNativeDriver: true, speed: 45, bounciness: 4 }),
-        Animated.spring(burstDeckRotate, { toValue: 0, useNativeDriver: true, speed: 45, bounciness: 3 }),
-        Animated.timing(burstDeckOpacity, { toValue: 1, duration: 70, useNativeDriver: true }),
-      ]).start();
-    } else {
-      // Previous (Up): previous card flips in from above with snappy spring
-      burstSlideX.setValue(0);
-      burstSlideY.setValue(-16);
-      burstDeckScale.setValue(1.02);
-      burstDeckRotate.setValue(1);
-      burstDeckOpacity.setValue(0.9);
-
-      Animated.parallel([
-        Animated.spring(burstSlideY, { toValue: 0, useNativeDriver: true, speed: 45, bounciness: 4 }),
-        Animated.spring(burstDeckScale, { toValue: 1, useNativeDriver: true, speed: 45, bounciness: 4 }),
-        Animated.spring(burstDeckRotate, { toValue: 0, useNativeDriver: true, speed: 45, bounciness: 3 }),
-        Animated.timing(burstDeckOpacity, { toValue: 1, duration: 70, useNativeDriver: true }),
-      ]).start();
-    }
-  }, [item?.id, burstSlideX, burstSlideY, burstDeckScale, burstDeckRotate, burstDeckOpacity]);
+  }, [preload, active, pop, isBurst, item?.id, reduceMotion]);
 
   // Liquid-glass backdrop breathing: slow zoom so the photo-derived backdrop
   // feels alive. Only run for cards that actually show a backdrop.
   const gesture = useRef({
     movedRef: false,
+    position: 0,
+    origin: 0,
+    latest: 0,
+    releaseVelocity: 0,
+    dragging: false,
+    ready: false,
+    version: 0,
   }).current;
   const trashingRef = useRef(false);
+  const trashOpVersionRef = useRef(0);
   // Favorite identity guard (ISSUE-004): a slow PhotoKit toggle resolving
   // after the card switched frames (or a second swipe landing meanwhile)
   // must not paint the stale favorite state onto the new frame. Each commit
@@ -978,7 +945,7 @@ function MemoryCard({
   const commitFav = useCallback(() => {
     if (trashingRef.current) return;
     trashingRef.current = true;
-    // Reset only when the async toggle settles (not after the 300ms snapback):
+    // Reset only when the async toggle settles (not after visual snapback):
     // on slow PhotoKit assets the old timing re-opened the gate while the
     // first toggle was still in flight, letting a second swipe flip the
     // favorite twice back to its original value.
@@ -990,15 +957,7 @@ function MemoryCard({
     };
     const isStale = () =>
       favOpVersionRef.current !== opVersion || latestItemRef.current?.id !== committedItemId;
-    void Haptics.selectionAsync();
-    // MD3 Emphasized Decelerate: cubic-bezier(0.05, 0.7, 0.1, 1.0), 300ms
-    const snapBack = (cb) => Animated.timing(translateX, {
-      toValue: 0,
-      duration: 300,
-      easing: Easing.bezier(0.05, 0.7, 0.1, 1.0),
-      useNativeDriver: true,
-    }).start(cb);
-    snapBack();
+    settleMotion(translateX, 0, { velocity: gesture.releaseVelocity, reduced: reduceMotion }).start();
     toggleFavorite(item)
       .then(({ favorite, changed }) => {
         if (isStale()) {
@@ -1007,16 +966,13 @@ function MemoryCard({
         }
         setFav(favorite);
         if (!changed) {
-          void Haptics.selectionAsync();
           settle();
           return;
         }
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         if (favorite) {
-          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           favBurst.setValue(1);
-          Animated.timing(favBurst, { toValue: 0, duration: 700, useNativeDriver: true }).start();
-        } else {
-          void Haptics.selectionAsync();
+          fadeMotion(favBurst, 0, reduceMotion ? MOTION.reducedMs : MOTION.feedbackMs).start();
         }
         onFavoriteChange?.(favorite);
         settle();
@@ -1024,7 +980,7 @@ function MemoryCard({
       .catch(() => {
         settle();
       });
-  }, [item, translateX, favBurst, onFavoriteChange]);
+  }, [item, translateX, favBurst, onFavoriteChange, gesture, reduceMotion]);
 
   // ---- Trash (swipe left): cut audio the moment the card leaves ----
   const assetIdentityRef = useRef(item?.id);
@@ -1033,14 +989,20 @@ function MemoryCard({
     if (trashingRef.current || !activeRef.current) return;
     trashingRef.current = true;
     const operationId = item?.id;
+    const opVersion = ++trashOpVersionRef.current;
+    const releasePosition = gesture.position;
+    const releaseVelocity = gesture.releaseVelocity;
     silenceAllPlayers();
     setPlaying(false);
     let allowed = false;
     try { allowed = onPrepareTrash ? await onPrepareTrash(item) : false; } catch {}
-    if (!allowed || assetIdentityRef.current !== operationId) {
+    if (trashOpVersionRef.current !== opVersion || assetIdentityRef.current !== operationId) return;
+    if (!allowed) {
       trashingRef.current = false;
       dismissingRef.current = false;
-      Animated.spring(translateX, { toValue: 0, friction: 8, tension: 60, useNativeDriver: true }).start(() => setHorizontalGesture(false));
+      settleMotion(translateX, 0, { velocity: releaseVelocity, reduced: reduceMotion }).start(({ finished }) => {
+        if (finished && trashOpVersionRef.current === opVersion) setHorizontalGesture(false);
+      });
       return;
     }
     dismissingRef.current = true; // v142: suppress crossfade on trash
@@ -1049,44 +1011,36 @@ function MemoryCard({
     // commit of setPlaying(false) — the JS thread may be busy for frames.
     silenceAllPlayers();
     setPlaying(false);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // MD3 Emphasized Accelerate: cubic-bezier(0.3, 0, 0.8, 0.15), 200ms
-    Animated.timing(translateX, {
-      toValue: -winWidth,
-      duration: 200,
-      easing: Easing.bezier(0.3, 0, 0.8, 0.15),
-      useNativeDriver: true,
-    }).start(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    exitMotion(translateX, releasePosition, Math.min(-winWidth, releasePosition), releaseVelocity, reduceMotion).start(({ finished }) => {
+      if (!finished || trashOpVersionRef.current !== opVersion || assetIdentityRef.current !== operationId) return;
+      if (isBurst) burstDirectionRef.current = 1;
       onTrash?.(item);
       translateX.setValue(0);
       trashingRef.current = false;
       dismissingRef.current = false;
       setHorizontalGesture(false);
-      if (isBurst) {
-        setHorizontalGesture(false);
-        burstSlideY.setValue(22);
-        burstDeckScale.setValue(0.97);
-        // MD3 Emphasized Decelerate: cubic-bezier(0.05, 0.7, 0.1, 1.0), 250ms
-        Animated.parallel([
-          Animated.timing(burstSlideY, {
-            toValue: 0,
-            duration: 250,
-            easing: Easing.bezier(0.05, 0.7, 0.1, 1.0),
-            useNativeDriver: true,
-          }),
-          Animated.timing(burstDeckScale, {
-            toValue: 1,
-            duration: 250,
-            easing: Easing.bezier(0.05, 0.7, 0.1, 1.0),
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }
     });
-  }, [item, translateX, winWidth, onTrash, onPrepareTrash, isBurst, setHorizontalGesture, burstSlideY, burstDeckScale]);
+  }, [item, translateX, winWidth, onTrash, onPrepareTrash, isBurst, setHorizontalGesture, gesture, reduceMotion]);
 
   const commitFavRef = useCallback(() => commitFav(), [commitFav]);
   const commitTrashRef = useCallback(() => commitTrash(), [commitTrash]);
+
+  // A recycled burst card and an unmounted card must never accept an old
+  // PhotoKit result or an interrupted animation's completion callback.
+  useEffect(() => () => {
+    favOpVersionRef.current++;
+    trashOpVersionRef.current++;
+    gesture.version++;
+    gesture.dragging = false;
+    translateX.stopAnimation();
+    translateX.setValue(0);
+    favBurst.stopAnimation();
+    favBurst.setValue(0);
+    trashingRef.current = false;
+    dismissingRef.current = false;
+    setHorizontalGesture(false);
+  }, [item?.id, gesture, translateX, favBurst, setHorizontalGesture]);
 
   // ---- Long press: video → 2x; live photos and still photos intentionally do nothing ----
   const handleLongPress = useCallback(() => {
@@ -1113,6 +1067,7 @@ function MemoryCard({
     handleZoomDoubleTap,
     setHorizontalGesture,
     resumeGestureAudio,
+    reduceMotion,
   };
 
   const lockDirection = useCallback((g) => {
@@ -1131,6 +1086,7 @@ function MemoryCard({
 
   const shouldCaptureHorizontal = useCallback(
     (e, g) => {
+      if (trashingRef.current) return false;
       const touches = e?.nativeEvent?.touches ? e.nativeEvent.touches.length : g.numberActiveTouches;
       if (touches >= 2) return true;
       if (zoomedRef.current) return Math.abs(g.dx) + Math.abs(g.dy) > 8;
@@ -1150,10 +1106,12 @@ function MemoryCard({
     () =>
       PanResponder.create({
         onStartShouldSetPanResponderCapture: (e, g) => {
+          if (trashingRef.current) return false;
           const touches = e?.nativeEvent?.touches ? e.nativeEvent.touches.length : g.numberActiveTouches;
           return touches >= 2;
         },
         onStartShouldSetPanResponder: (e, g) => {
+          if (trashingRef.current) return false;
           const touches = e?.nativeEvent?.touches ? e.nativeEvent.touches.length : g.numberActiveTouches;
           return touches >= 2 || zoomedRef.current;
         },
@@ -1186,7 +1144,8 @@ function MemoryCard({
             z.basePanY = z.panY;
             h.setHorizontalGesture(true);
           } else {
-            h.translateX.stopAnimation();
+            beginMotionDrag(h.translateX, h.gesture, g.dx);
+            h.gesture.releaseVelocity = 0;
             h.clearFade();
             h.gesture.movedRef = false;
             h.setHorizontalGesture(true);
@@ -1199,6 +1158,9 @@ function MemoryCard({
           const touches = e?.nativeEvent?.touches ? e.nativeEvent.touches.length : g.numberActiveTouches;
           if (touches >= 2) {
             if (z.mode !== 'pinch') {
+              h.gesture.dragging = false;
+              h.gesture.version++;
+              settleMotion(h.translateX, 0, { reduced: h.reduceMotion }).start();
               z.mode = 'pinch';
               z.baseDist = pinchDist(e) || 1;
               z.baseScale = z.scale;
@@ -1241,7 +1203,7 @@ function MemoryCard({
             zoomPanY.setValue(py);
           } else if (z.mode === 'swipe') {
             h.gesture.movedRef = true;
-            h.translateX.setValue(g.dx);
+            moveMotionDrag(h.translateX, h.gesture, g.dx);
           }
         },
 
@@ -1257,7 +1219,16 @@ function MemoryCard({
             if (Math.abs(g.dx) + Math.abs(g.dy) <= 8) h.handleZoomDoubleTap();
             h.resumeGestureAudio();
           } else if (z.mode === 'swipe') {
+            if (!h.gesture.ready) {
+              // A very quick release can beat the native stop callback. Wait
+              // for that position before making the same existing decision.
+              const released = { ...g };
+              h.gesture.onReady = () => panResponder.panHandlers.onPanResponderRelease(e, released);
+              return;
+            }
             const { dx, dy, vx } = g;
+            h.gesture.dragging = false;
+            h.gesture.releaseVelocity = vx;
             const isLeft = dx < 0;
             const isHorizontal = isLeft
               ? Math.abs(dx) >= Math.abs(dy) * 0.82 || Math.abs(dx) >= 40
@@ -1270,7 +1241,7 @@ function MemoryCard({
               // Favorite keeps the card as current content — audio comes back.
               h.resumeGestureAudio();
             } else {
-              Animated.spring(h.translateX, { toValue: 0, useNativeDriver: true, friction: 6 }).start();
+              settleMotion(h.translateX, 0, { velocity: vx, reduced: h.reduceMotion }).start();
               h.resumeGestureAudio();
             }
             if (!isTrashCommit) h.setHorizontalGesture(false);
@@ -1284,8 +1255,9 @@ function MemoryCard({
           const z = zoomStateRef.current;
           clearTimeout(longPressRef.current);
           setVideoRate(1);
+          h.gesture.dragging = false;
           if (z.mode === 'swipe') {
-            Animated.spring(h.translateX, { toValue: 0, useNativeDriver: true, friction: 6 }).start();
+            settleMotion(h.translateX, 0, { reduced: h.reduceMotion }).start();
             h.setHorizontalGesture(false);
           } else if (z.mode === 'pinch' && z.scale <= 1.02) {
             h.resetZoom();
@@ -1675,7 +1647,7 @@ function MemoryCard({
   // ---- Gesture-driven interpolations ----
   const rotate = translateX.interpolate({
     inputRange: [-200, 0, 200],
-    outputRange: ['-4deg', '0deg', '4deg'],
+    outputRange: reduceMotion ? ['0deg', '0deg', '0deg'] : [`-${MOTION.swipeTilt}deg`, '0deg', `${MOTION.swipeTilt}deg`],
     extrapolate: 'clamp',
   });
   // Directional tint reveals what each swipe commits to (right = favorite, left = trash).
@@ -1696,7 +1668,7 @@ function MemoryCard({
   });
   const heartScale = translateX.interpolate({
     inputRange: [0, 160],
-    outputRange: [0.4, 1.3],
+    outputRange: reduceMotion ? [1, 1] : [0.85, 1],
     extrapolate: 'clamp',
   });
   const trashOpacity = translateX.interpolate({
@@ -1706,16 +1678,12 @@ function MemoryCard({
   });
   const trashScale = translateX.interpolate({
     inputRange: [-160, 0],
-    outputRange: [1.3, 0.4],
+    outputRange: reduceMotion ? [1, 1] : [1, 0.85],
     extrapolate: 'clamp',
   });
   const favBurstScale = favBurst.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.4, 1.5],
-  });
-  const burstRotateDeg = burstDeckRotate.interpolate({
-    inputRange: [-10, 0, 10],
-    outputRange: ['-10deg', '0deg', '10deg'],
+    outputRange: reduceMotion ? [1, 1] : [1, MOTION.pulseScale],
   });
 
   // Photos decode for every rendered card (swipe must never wait for a fresh
@@ -1821,16 +1789,13 @@ function MemoryCard({
               const stackUri = imageUri(sib.displayUri) || imageUri(sib.imageUri) || imageUri(sib.localUri);
               const stackColor = BURST_RAINBOW_BORDER_COLORS[(sib.burstIndex ?? (groupIndex + k)) % BURST_RAINBOW_BORDER_COLORS.length];
               return (
-                <View
-                  key={`stack-slot-${k}`}
+                <Animated.View
+                  key={`stack-${sib.id}`}
                   style={[
                     styles.stackCard,
                     {
-                      transform: [
-                        { translateY: k * 26 },
-                        { rotate: `${-k * 2.5}deg` },
-                        { scale: 1 - k * 0.03 },
-                      ],
+                      zIndex: 4 - k,
+                      transform: burstPoses[k],
                       borderWidth: 2,
                       borderColor: stackColor,
                     },
@@ -1847,7 +1812,7 @@ function MemoryCard({
                       transition={0}
                     />
                   ) : null}
-                </View>
+                </Animated.View>
               );
             })}
           </Animated.View>
@@ -1858,14 +1823,10 @@ function MemoryCard({
           style={[
             styles.slide,
             {
-              opacity: burstDeckOpacity,
               transform: [
                 { rotate },
                 { translateX },
-                { translateX: burstSlideX },
-                { translateY: burstSlideY },
-                { scale: burstDeckScale },
-                { rotate: burstRotateDeg },
+                ...burstPoses[0],
               ],
             },
           ]}
@@ -2026,7 +1987,7 @@ function MemoryCard({
               style={[styles.favBurst, { opacity: favBurst, transform: [{ scale: favBurstScale }] }]}
               pointerEvents="none"
             >
-              <Ionicons name="heart" size={110} color={colors.fav} />
+              <Ionicons name="heart" size={64} color={colors.fav} />
             </Animated.View>
 
             {/* loading indicator (photo & video) — inside card for exact geometric center alignment */}

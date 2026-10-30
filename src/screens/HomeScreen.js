@@ -42,6 +42,7 @@ import { buildRatingPromptStateAfterAction, shouldOfferRatingPrompt } from '../r
 import { loadRatingPromptState, openAppStoreReview, saveRatingPromptState } from '../ratingStore';
 
 import { useI18n } from '../i18n';
+import { MOTION, fadeMotion, useReducedMotion } from '../motion';
 
 const PAGE_SIZE = 50;
 const EMPTY_LIBRARY_RETRY_LIMIT = 3;
@@ -103,6 +104,7 @@ const BottomControls = memo(function BottomControls({ bottom, summary, canUndo, 
 
 export default function HomeScreen({ accessPrivileges = 'all' }) {
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
   const isFocused = useIsFocused();
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const isLandscape = viewportWidth > viewportHeight;
@@ -202,6 +204,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
   const scrollOffsetRef = useRef(0);
   const toastAnim = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef(null);
+  const toastVersion = useRef(0);
 
   useEffect(() => {
     feedRef.current = feed;
@@ -209,20 +212,27 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
 
   const showToast = useCallback(
     (msg, kind = 'default') => {
+      const version = ++toastVersion.current;
       setToast({ text: msg, kind });
       clearTimeout(toastTimer.current);
+      toastAnim.stopAnimation();
       toastAnim.setValue(0);
-      Animated.spring(toastAnim, { toValue: 1, useNativeDriver: true, friction: 7 }).start();
+      fadeMotion(toastAnim, 1, reduceMotion ? MOTION.reducedMs : MOTION.fadeMs).start();
       toastTimer.current = setTimeout(() => {
-        Animated.timing(toastAnim, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: true,
-        }).start(() => setToast(null));
+        if (toastVersion.current !== version) return;
+        fadeMotion(toastAnim, 0, reduceMotion ? MOTION.reducedMs : MOTION.fadeMs).start(({ finished }) => {
+          if (finished && toastVersion.current === version) setToast(null);
+        });
       }, 1500);
     },
-    [toastAnim]
+    [toastAnim, reduceMotion]
   );
+
+  useEffect(() => () => {
+    toastVersion.current++;
+    clearTimeout(toastTimer.current);
+    toastAnim.stopAnimation();
+  }, [toastAnim]);
 
   const makeFeed = useCallback((assets) => {
     const session = getBrowseSession();
