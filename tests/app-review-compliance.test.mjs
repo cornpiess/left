@@ -154,12 +154,11 @@ test('emptying the trash uses a sole system confirmation', async () => {
   assert.doesNotMatch(media, /const chunkSize = 50/);
 });
 
-test('contextual hints are localized and old tutorial completion is respected', async () => {
-  const [home, hints] = await Promise.all([
+test('gesture education is frontloaded and legacy users still skip onboarding', async () => {
+  const [home, state] = await Promise.all([
     readFile(new URL('../src/screens/HomeScreen.js', import.meta.url), 'utf8'),
-    readFile(new URL('../src/useExperienceHints.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/onboardingState.js', import.meta.url), 'utf8'),
   ]);
-  assert.match(home, /SwipeCoachOverlay/);
-  assert.match(home, /learnHint\('select'\)/);
-  assert.match(hints, /vibe-swipe-coach-done/);
+  assert.doesNotMatch(home, /SwipeCoachOverlay|useExperienceHints|learnHint/);
+  assert.match(state, /vibe-swipe-coach-done/);
 });

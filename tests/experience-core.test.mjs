@@ -2,7 +2,6 @@ import { DAILY_FREE_LIMIT as LIMIT } from '../src/membershipCore.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createExposureController, createCleanupController } from '../src/experienceCore.mjs';
-import { nextExperienceHint, learnExperience } from '../src/experienceHints.mjs';
 
 test('failed or unsettled display never marks history', async () => {
  let writes=0;const c=createExposureController({review:async()=>writes++});
@@ -33,12 +32,4 @@ test('Pro and day rollover use current policy at decision time; invalid items ne
  const state={date:'today',isPro:true};const policies=[];const c=createCleanupController({getMembership:()=>state,select:async(_,p)=>{policies.push(p);return {allowed:true,used:0};}});
  assert.equal((await c.select(null)).reason,'invalid');await c.select({id:'a'});state.isPro=false;state.date='tomorrow';await c.select({id:'b'});
  assert.deepEqual(policies.map(p=>[p.date,p.charge]),[['today',false],['tomorrow',true]]);
-});
-test('progressive hints wait for a real photo, teach one action and never force cleanup',()=>{
- const context={ready:true,browsingCount:1};assert.equal(nextExperienceHint({}, {...context,ready:false}),null);
- assert.equal(nextExperienceHint({},context),'browse');
- const browsed=learnExperience({},'browse');assert.equal(nextExperienceHint(browsed,context),null);
- assert.equal(nextExperienceHint(browsed,{ready:true,browsingCount:3}),'cleanup');
- assert.equal(nextExperienceHint(learnExperience(browsed,'select'),{ready:true,browsingCount:3}),null);
- assert.equal(nextExperienceHint(learnExperience({},'dismiss'),context),null);
 });

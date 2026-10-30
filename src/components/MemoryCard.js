@@ -1,3 +1,4 @@
+import { SWIPE_COMMIT } from '../gestureContract.mjs';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -63,7 +64,8 @@ import { photoCardSize } from '../mediaWindow.mjs';
  * 手势纪律：拖动/捏合/平移开始（onPanResponderGrant）0ms 全员静音（PRD 5.2，
  * 含尚未判定方向的拖动）；手势取消或未提交删除时立即恢复本卡播放。
  */
-const SWIPE_COMMIT = 52;
+// Keep tutorial and real-photo commit distance identical.
+
 const MAX_ZOOM = 4;
 const LONG_PRESS_MS = 400;
 const DIRECTION_LOCK_DISTANCE = 12;

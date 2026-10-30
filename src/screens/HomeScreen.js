@@ -36,8 +36,6 @@ import DayMemoryCarousel from '../components/DayMemoryCarousel';
 import VideoProgressControl from '../components/VideoProgressControl';
 import MoreMenuModal from '../components/MoreMenuModal';
 import PaywallModal from '../components/PaywallModal';
-import SwipeCoachOverlay from '../components/SwipeCoachOverlay';
-import useExperienceHints from '../useExperienceHints';
 import { getMembershipState, initMembership, subscribeMembership, DAILY_FREE_LIMIT } from '../membership';
 import MaoQiuIcon from '../components/MaoQiuIcon';
 import { buildRatingPromptStateAfterAction, shouldOfferRatingPrompt } from '../ratingPrompt.mjs';
@@ -130,7 +128,6 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
   const [dayScrolling, setDayScrolling] = useScrollLiveness();
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
-  const { hint, learn: learnHint, shown: photoShown } = useExperienceHints();
   const [paywallReason, setPaywallReason] = useState('menu');
   const [membership, setMembership] = useState(getMembershipState());
   const [trashSummary, setTrashSummary] = useState({ count: 0, sizeBytes: 0, unknownCount: 0, calculating: false });
@@ -759,7 +756,6 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
 
   const handleTrash = useCallback(
     (entry, selectedItem) => {
-      learnHint('select');
       const pos = burstPosRef.current.get(entry.key) || 0;
       const cur = selectedItem || entry.unit.items[pos] || entry.unit.items[0];
       const idx = feedRef.current.findIndex((e) => e.key === entry.key);
@@ -807,7 +803,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
       }
       setScrolling(false);
     },
-    [showToast, listH, loadNextPage, makeFeed, refreshTrashSummary, t, learnHint]
+    [showToast, listH, loadNextPage, makeFeed, refreshTrashSummary, t]
   );
 
   const handleUndoTrash = useCallback(() => {
@@ -892,7 +888,6 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
           return { ...prev, items: remaining };
         });
 
-        learnHint('select');
         showToast(t('home.toastMovedToMaoqiu'));
         refreshTrashSummary();
       } catch (err) {
@@ -900,7 +895,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
         showToast(t("home.toastMoveFailed"));
       }
     },
-    [activeVideoPlayer, listH, makeFeed, refreshTrashSummary, scheduleUnlock, showToast, t, learnHint]
+    [activeVideoPlayer, listH, makeFeed, refreshTrashSummary, scheduleUnlock, showToast, t]
   );
 
   const handleGroupNext = useCallback(async (entryKey, direction = 1) => {
@@ -1030,9 +1025,8 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
           journeyRef.current.firstPhoto = true;
           flightEvent('first-photo-ready', Date.now() - journeyRef.current.startedAt);
         }
-        photoShown(item, activeIndexRef.current > 0);
       }).catch(() => showToast(t('home.toastMoveFailed')));
-  }, [showToast, t, photoShown, dayBrowse, scrolling, saveBrowse]);
+  }, [showToast, t, dayBrowse, scrolling, saveBrowse]);
   const handleDayMediaReady = useCallback((item) => {
     if (!dayBrowse || dayScrolling || dayBrowse.items[dayWindowIndex]?.id !== item?.id) return;
     getBrowseSession().enterDay(dayBrowse.items, item.id, getBrowseSession().state.anchorId);
@@ -1376,13 +1370,6 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
         onToast={showToast}
       />
 
-      {/* First-run gesture coach */}
-      <SwipeCoachOverlay
-        visible={Boolean(hint) && appActive && !scrolling && !trashOpen && !moreMenuOpen && !paywallOpen && !dayBrowse && !isLandscape}
-        variant={hint}
-        onDismiss={() => learnHint('dismiss')}
-      />
-
       {/* Toast */}
       {toast ? (
         <Animated.View
@@ -1611,4 +1598,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-

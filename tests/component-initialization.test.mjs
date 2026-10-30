@@ -1,3 +1,4 @@
+import * as gestureContract from '../src/gestureContract.mjs';
 import * as mediaWindow from '../src/mediaWindow.mjs';
 import { DAILY_FREE_LIMIT } from '../src/membershipCore.mjs';
 import test from 'node:test';
@@ -20,6 +21,7 @@ function renderSource(source,props){
   '../experience':{experience:{canAccess:()=>true}},
   '../nativePhotoPreview':{supportsNativePhotoPreview:false},
   '../mediaWindow.mjs':mediaWindow,
+  '../gestureContract.mjs':gestureContract,
   '../media':new Proxy({isVideoAsset:item=>item?.mediaType==='video',isItemFavorite:()=>false},{get:(o,k)=>k in o?o[k]:universal}),
  };
  const code=babel.transformSync(source,{configFile:false,babelrc:false,plugins:[require.resolve('@babel/plugin-transform-react-jsx'),require.resolve('@babel/plugin-transform-modules-commonjs')]}).code;

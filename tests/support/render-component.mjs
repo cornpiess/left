@@ -1,3 +1,4 @@
+import * as gestureContract from '../../src/gestureContract.mjs';
 import * as mediaWindow from '../../src/mediaWindow.mjs';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -16,8 +17,8 @@ export function renderComponent(file, props={}, overrides={}) {
   '../membership':{getMembershipState:()=>({isPro:false,usedToday:0,date:'today'}),getIapCatalogState:()=>({products:{yearly:{},lifetime:{}},status:'ready'}),IAP_SKUS:{YEARLY:'yearly',LIFETIME:'lifetime'},PRICING_PLANS:{YEARLY:{title:'yearly'},LIFETIME:{title:'lifetime'}}},
   '../experience':{experience:{}},
   '../nativePhotoPreview':{supportsNativePhotoPreview:false},
-  '../useExperienceHints':{__esModule:true,default:()=>({hint:null,learn:()=>{},shown:()=>{}})},
   '../mediaWindow.mjs':mediaWindow,
+  '../gestureContract.mjs':gestureContract,
   '../media':new Proxy({isVideoAsset:item=>item?.mediaType==='video',isItemFavorite:()=>false},{get:(o,k)=>k in o?o[k]:universal}),
   ...overrides,
  };
