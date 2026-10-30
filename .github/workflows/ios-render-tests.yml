@@ -1,0 +1,118 @@
+name: iOS render regression tests
+
+# Unsigned simulator verification for the native photo-display pipeline:
+#   render-tests    — pixel-level XCTest over the PRODUCTION PhotoContentView
+#                     types (Package.swift inside the expo module), no app
+#                     build, no signing.
+#   app-sim-build   — full app compiled for the simulator via expo prebuild
+#                     (CNG) with signing disabled. Catches Swift compile
+#                     errors in the pod. Never signs, never uploads.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['modules/maoqiu-photo-preview/**']
+
+concurrency:
+  group: ios-render-tests
+  cancel-in-progress: true
+
+jobs:
+  render-tests:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select newest Xcode toolchain
+        run: |
+          XCODE_APP="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Selecting $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+
+      - name: Run PhotoContentView pixel regression tests
+        working-directory: modules/maoqiu-photo-preview
+        run: |
+          DEST_NAME="$(xcrun simctl list devices available | grep -oE 'iPhone [^(]+' | head -1 | sed 's/[[:space:]]*$//')"
+          if [ -z "$DEST_NAME" ]; then
+            echo "ERROR: no available iPhone simulator" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "Simulator: $DEST_NAME"
+          # SPM packages expose auto schemes per TARGET, not per package —
+          # discover the test scheme instead of hard-coding the package name.
+          xcodebuild -list 2>/dev/null | tee /tmp/schemes.txt || true
+          SCHEME="$(sed -n '/Schemes:/,$p' /tmp/schemes.txt | sed 1d | grep -E '^[[:space:]]+[A-Za-z]' | sed 's/[[:space:]]//g' | grep -iE 'render|test' | head -1 || true)"
+          if [ -z "$SCHEME" ]; then
+            SCHEME="$(sed -n '/Schemes:/,$p' /tmp/schemes.txt | sed 1d | grep -E '^[[:space:]]+[A-Za-z]' | sed 's/[[:space:]]//g' | head -1 || true)"
+          fi
+          if [ -z "$SCHEME" ]; then
+            echo "ERROR: no scheme discovered for the render tests" >&2
+            cat /tmp/schemes.txt >&2
+            exit 1
+          fi
+          echo "Testing scheme '$SCHEME'"
+          set -o pipefail
+          xcodebuild test -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,name=$DEST_NAME" \
+            > /tmp/xc.log 2>&1 || {
+              grep -E "error:" /tmp/xc.log | head -60
+              echo '--- tail ---'
+              tail -30 /tmp/xc.log
+              exit 1
+            }
+          grep -E "Test Suite|Executed" /tmp/xc.log | tail -8
+
+  app-sim-build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Select newest Xcode toolchain
+        run: |
+          XCODE_APP="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Selecting $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+
+      - name: Install JS dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Tests
+        run: npm test
+
+      - name: Generate native project (Expo CNG)
+        run: |
+          npx expo prebuild --platform ios --no-install
+          ( cd ios && pod install )
+
+      - name: Unsigned simulator build of the app
+        run: |
+          DEST_NAME="$(xcrun simctl list devices available | grep -oE 'iPhone [^(]+' | head -1 | sed 's/[[:space:]]*$//')"
+          echo "Simulator: $DEST_NAME"
+          WORKSPACE=""
+          for candidate in ios/*.xcworkspace; do
+            if [ -e "$candidate" ]; then WORKSPACE="$candidate"; break; fi
+          done
+          if [ -z "$WORKSPACE" ]; then echo "ERROR: no xcworkspace after prebuild" >&2; exit 1; fi
+          SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
+          echo "Building scheme '$SCHEME'"
+          set -o pipefail
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Debug \
+            -destination "platform=iOS Simulator,name=$DEST_NAME" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build > /tmp/xc.log 2>&1 || {
+              grep -E "error:" /tmp/xc.log | head -60
+              echo '--- failed commands ---'
+              grep -A6 "The following build commands failed" /tmp/xc.log | head -20
+              exit 1
+            }
+          echo 'simulator build OK'

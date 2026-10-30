@@ -1,0 +1,114 @@
+name: iOS release build (GitHub macOS)
+
+# Full iOS release built, signed and uploaded on GitHub's own macOS runner —
+# consumes no EAS cloud-build quota. The native project is generated on the
+# fly (Expo CNG), the build number is resolved from App Store Connect, and
+# the finished IPA is uploaded to TestFlight via an ASC API key.
+#
+# Required repository secrets:
+#   APPLE_CERT_P12_BASE64        base64 of the Apple Distribution .p12
+#   APPLE_CERT_PASSWORD          password of that .p12
+#   APPLE_PROVISION_PROFILE_BASE64  base64 of the App Store .mobileprovision
+#   ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8_BASE64  ASC API key (team key)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-number:
+        description: 'Build number (blank = latest on App Store Connect + 1)'
+        default: ''
+      upload-to-testflight:
+        description: 'Upload the finished IPA to TestFlight'
+        type: boolean
+        default: true
+
+concurrency:
+  group: ios-native-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # Constitutional gate (AGENTS.md 构建与发版铁律 #1): a revoked
+      # certificate must fail HERE, in seconds, instead of 3 minutes into
+      # the xcodebuild archive. No dependencies needed — plain node + openssl.
+      - name: Preflight signing credentials
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_PROVISION_PROFILE_BASE64: ${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: node scripts/ci/preflight-signing.mjs
+
+      # Expo SDK 57 dependencies declare Swift tools 6.2.0; the runner's
+      # default Xcode only ships 6.1, so select the newest installed Xcode
+      # before any native step runs.
+      - name: Select newest Xcode toolchain
+        run: |
+          XCODE_APP="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Selecting $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+          swift --version | head -1
+
+      - name: Install JS dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Tests
+        run: npm test
+
+      - name: Resolve build number and patch app.json
+        id: buildno
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          N="$(node scripts/ci/asc-next-build-number.mjs --override '${{ inputs.build-number }}')"
+          case "$N" in ''|*[!0-9]*) echo "invalid build number: $N" >&2; exit 1;; esac
+          echo "number=$N" >> "$GITHUB_OUTPUT"
+          node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('app.json','utf8'));j.expo.ios=j.expo.ios||{};j.expo.ios.buildNumber=String(process.argv[1]);fs.writeFileSync('app.json',JSON.stringify(j,null,2)+'\n')" "$N"
+          echo "Build number resolved: $N"
+
+      - name: Import signing materials
+        id: signing
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_PROVISION_PROFILE_BASE64: ${{ secrets.APPLE_PROVISION_PROFILE_BASE64 }}
+        run: bash scripts/ci/import-ios-signing.sh
+
+      - name: Build and export IPA
+        env:
+          PROFILE_NAME: ${{ steps.signing.outputs.profile_name }}
+          TEAM_ID: ${{ steps.signing.outputs.team_id }}
+          BUNDLE_ID: ${{ steps.signing.outputs.bundle_id }}
+          SIGNING_IDENTITY: ${{ steps.signing.outputs.signing_identity }}
+        run: bash scripts/ci/build-ipa.sh
+
+      - name: Upload to TestFlight
+        if: ${{ inputs.upload-to-testflight }}
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: bash scripts/ci/upload-testflight.sh "$(ls build/ipa/*.ipa | head -1)"
+
+      - name: Collect IPA artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-ipa-${{ steps.buildno.outputs.number }}
+          path: build/ipa/*.ipa
+          if-no-files-found: warn
