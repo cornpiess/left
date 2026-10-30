@@ -49,12 +49,11 @@ export default function OnboardingMotion({ paused = false }) {
   }, [progress, reduceMotion, paused, foreground]);
 
   const track = name => progress.interpolate(motionConfig(name, sceneWidth + 152));
-  const firstStyle = { opacity: track('firstOpacity'), transform: [{ translateY: track('firstY') }] };
+  const firstStyle = { transform: [{ translateY: track('firstY') }] };
   const selectedStyle = {
-    opacity: track('selectedOpacity'),
     transform: [{ translateX: track('selectedX') }, { translateY: track('selectedY') }, { rotate: track('selectedAngle') }],
   };
-  const nextStyle = { opacity: track('nextOpacity'), transform: [{ translateY: track('nextY') }] };
+  const nextStyle = { transform: [{ translateY: track('nextY') }] };
 
   return <View style={[styles.scene, { width: sceneWidth, height: 266 * sceneScale }]} pointerEvents="none" accessible accessibilityRole="image" accessibilityLabel={t('onboarding.motionLabel')}>
     <View style={[styles.canvas, { width: sceneWidth, transform: [{ scale: sceneScale }] }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -65,15 +64,15 @@ export default function OnboardingMotion({ paused = false }) {
         </Svg>
         <Text style={styles.receiptLabel}>{t('onboarding.pendingShort')} +1</Text>
       </Animated.View>
-      <View style={[styles.frames, { left: sceneWidth / 2 - 76 }]}>
-        <Animated.View style={[styles.memory, firstStyle]}><MemoryOutline kind="sun" /><Text style={styles.cardLabel}>{t('onboarding.memoryLabel')}</Text></Animated.View>
+      <View style={[styles.frames, { left: 0 }]}>
+        <Animated.View style={[styles.memory, nextStyle]}><MemoryOutline kind="coffee" /><Animated.Text style={[styles.cardLabel, { opacity: track('nextMemory') }]}>{t('onboarding.memoryLabel')}</Animated.Text><Animated.Text style={[styles.cardLabel, { opacity: track('nextKeep') }]}>{t('onboarding.keepLabel')}</Animated.Text></Animated.View>
+        <Animated.View style={[styles.memory, firstStyle]}><MemoryOutline kind="sun" /><Animated.Text style={[styles.cardLabel, { opacity: track('firstMemory') }]}>{t('onboarding.memoryLabel')}</Animated.Text><Animated.Text style={[styles.cardLabel, { opacity: track('firstKeep') }]}>{t('onboarding.keepLabel')}</Animated.Text></Animated.View>
         <Animated.View style={[styles.memory, selectedStyle]}>
           <MemoryOutline kind="copy" />
           <Animated.Text style={[styles.cardLabel, { opacity: track('neutralLabel') }]}>{t('onboarding.memoryLabel')}</Animated.Text>
           <Animated.Text style={[styles.cardLabel, { opacity: track('decisionLabel') }]}>{t('onboarding.skipLabel')}</Animated.Text>
           <Animated.View style={[styles.leftArrow, { opacity: track('leftArrow') }]}><Svg width={24} height={24} viewBox="0 0 24 24" fill="none"><Path d="M19 12H5m6-6-6 6 6 6" stroke="#E8E8ED" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></Svg></Animated.View>
         </Animated.View>
-        <Animated.View style={[styles.memory, nextStyle]}><MemoryOutline kind="coffee" /><Text style={styles.cardLabel}>{t('onboarding.memoryLabel')}</Text></Animated.View>
       </View>
     </View>
   </View>;
@@ -81,10 +80,10 @@ export default function OnboardingMotion({ paused = false }) {
 const styles = StyleSheet.create({
   scene: { alignSelf: 'center', maxWidth: '100%', overflow: 'hidden' },
   canvas: { position: 'absolute', height: 266, top: 0 },
-  frames: { position: 'absolute', top: 32, width: 152, height: 186 },
-  memory: { ...StyleSheet.absoluteFillObject },
+  frames: { position: 'absolute', top: 16, width: '100%', height: 218, overflow: 'hidden' },
+  memory: { position: 'absolute', left: '50%', marginLeft: -76, top: 16, width: 152, height: 186 },
   cardLabel: { position: 'absolute', top: 119, left: 10, right: 10, textAlign: 'center', color: '#C3C5CF', fontSize: 12, lineHeight: 18 },
-  receipt: { position: 'absolute', top: 229, width: 172, minHeight: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  receipt: { position: 'absolute', top: 238, width: 172, minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   receiptLabel: { color: '#C3C5CF', fontSize: 12, lineHeight: 18, textAlign: 'center' },
   leftArrow: { position: 'absolute', top: 74, left: 12 },
 });

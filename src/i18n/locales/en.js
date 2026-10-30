@@ -216,6 +216,7 @@ export default {
     introTitle: "Photo cleanup.\nAs easy as scrolling.",
     summary: "Swipe left on what you don’t need. Everything else stays.",
     motionLabel: "Memory cards scroll upward. Unwanted cards move left into a review tray; other photos stay kept.",
+    keepLabel: "Keep",
     memoryLabel: "Memories",
     skipLabel: "Not needed",
     pendingShort: "Review",

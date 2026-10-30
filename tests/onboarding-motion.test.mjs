@@ -6,7 +6,7 @@ import { renderComponent, flatten } from './support/render-component.mjs';
 function at(name, ms) {
   const { inputRange:x, outputRange:y }=timeline.motionConfig(name,400);
   const time=ms/timeline.ONBOARDING_CYCLE_MS;
-  let i=0;while(i<x.length-2&&x[i+1]<time)i++;
+  let i=0;while(i<x.length-2&&x[i+1]<=time)i++;
   const ratio=Math.max(0,Math.min(1,(time-x[i])/(x[i+1]-x[i])));
   return parseFloat(y[i])+(parseFloat(y[i+1])-parseFloat(y[i]))*ratio;
 }
@@ -21,17 +21,28 @@ test('the viewer gets a neutral pause, then a decision, left tilt, departure and
   assert.equal(at('selectedX',3500),0);
   assert.equal(at('receipt',4100),0);
   assert.ok(at('selectedX',4300)<=-400);
-  assert.equal(at('selectedOpacity',4300),0);
   assert.ok(at('receipt',4600)>0);
   assert.equal(at('nextY',4800),0);
-  assert.equal(at('nextOpacity',4800),1);
 });
-test('every track has a continuous loop boundary and strictly ordered native keyframes',()=>{
-  for(const name of ['firstY','firstOpacity','selectedX','selectedY','selectedAngle','selectedOpacity','neutralLabel','decisionLabel','leftArrow','nextY','nextOpacity','receipt']){
+test('every track has a continuous loop boundary and ordered native keyframes',()=>{
+  for(const name of ['firstY','selectedX','selectedY','selectedAngle','neutralLabel','decisionLabel','leftArrow','nextY','firstMemory','firstKeep','nextMemory','nextKeep','receipt']){
     const config=timeline.motionConfig(name);
     assert.equal(config.outputRange[0],config.outputRange.at(-1),name);
-    for(let i=1;i<config.inputRange.length;i++)assert.ok(config.inputRange[i]>config.inputRange[i-1],name);
+    for(let i=1;i<config.inputRange.length;i++)assert.ok(config.inputRange[i]>=config.inputRange[i-1],name);
   }
+});
+test('the whole cycle and its seam always contain a full-opacity photo; vertical transfers are paired',()=>{
+  for(let ms=0;ms<=timeline.ONBOARDING_CYCLE_MS;ms+=4){
+    const intersection=y=>Math.max(0,Math.min(218,y+16+186)-Math.max(0,y+16));
+    const visible=[intersection(at('firstY',ms)),intersection(at('nextY',ms))];
+    if(Math.abs(at('selectedX',ms))<100)visible.push(intersection(at('selectedY',ms)));
+    assert.ok(Math.max(...visible)>70,`empty photo flow at ${ms}ms`);
+  }
+  for(const ms of [1150,1300,1500])assert.ok(Math.abs(at('selectedY',ms)-at('firstY',ms)-218)<1e-6);
+  for(const ms of [5800,6000,6200])assert.ok(Math.abs(at('firstY',ms)-at('nextY',ms)-218)<1e-6);
+  assert.equal(at('firstY',0),at('firstY',7200));
+  assert.equal(at('firstKeep',1100),1);
+  assert.equal(at('nextKeep',5600),1);
 });
 function setup({motion=false,reject=false}={}){
  const events={};let active=0;const props={paused:false};

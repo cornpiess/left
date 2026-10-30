@@ -216,6 +216,7 @@ export default {
     introTitle: "写真の整理を、\nスクロール感覚で。",
     summary: "不要な写真だけ左へ。ほかの写真はそのまま。",
     motionLabel: "思い出のカードが上に流れ、不要なカードが左の削除候補へ移動します。ほかの写真は保持されます。",
+    keepLabel: "残す",
     memoryLabel: "思い出",
     skipLabel: "不要な写真",
     pendingShort: "削除候補",

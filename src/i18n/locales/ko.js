@@ -216,6 +216,7 @@ export default {
     introTitle: "사진 정리,\n영상 넘기듯 가볍게.",
     summary: "필요 없는 사진만 왼쪽으로. 나머지는 그대로.",
     motionLabel: "추억 카드가 위로 넘어가고, 불필요한 카드는 왼쪽 삭제 대기함으로 이동해요. 다른 사진은 유지돼요.",
+    keepLabel: "보관",
     memoryLabel: "추억",
     skipLabel: "필요 없는 사진",
     pendingShort: "삭제 대기",

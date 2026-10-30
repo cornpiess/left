@@ -8,9 +8,12 @@ retry/limited-access handling remain unchanged.
 `OnboardingExperience` is shared by first launch and menu replay. `OnboardingMotion`
 uses local SVG outlines, a single native-driven progress value, transform and opacity.
 There are no photos, practice state, touch handlers, media IDs, history or quota writes.
-The 7.2-second loop shows browsing, a 1.15-second neutral pause, a delayed
-decision label, left tilt before full-size left departure, and continued browsing.
-The review receipt appears only after the departure finishes. No card shrinks away. Selection is never presented as immediate system deletion.
+The 7.2-second loop is a continuous stream: a kept card scrolls up as the next
+card enters from below; after a neutral pause and decision cue, that card tilts
+and slides left to reveal the next card underneath. This card is kept and scrolls
+up while the first card enters from below, closing the loop through a real page turn.
+Photos stay fully opaque at all times. Hidden resets are instantaneous outside
+the viewport or underneath the current card. The review receipt follows departure. Selection is never presented as immediate system deletion.
 
 Animation starts after the motion preference resolves. Pause, background, Reduce Motion
 and unmount stop the animation and reset to the first meaningful frame; foreground may

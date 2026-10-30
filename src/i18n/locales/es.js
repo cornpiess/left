@@ -216,6 +216,7 @@ export default {
     introTitle: "Limpia tus fotos.\nTan fácil como deslizar.",
     summary: "Desliza a la izquierda lo que no quieras. El resto se conserva.",
     motionLabel: "Las tarjetas suben. Las que no quieres van a la izquierda, a una bandeja de revisión. El resto se conserva.",
+    keepLabel: "Conservar",
     memoryLabel: "Recuerdos",
     skipLabel: "No la quiero",
     pendingShort: "Revisar",

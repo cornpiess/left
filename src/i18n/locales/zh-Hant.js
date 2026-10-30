@@ -216,6 +216,7 @@ export default {
     introTitle: "清理相簿，\n像刷影片一樣輕鬆。",
     summary: "不想留的左滑，其餘預設保留。",
     motionLabel: "回憶卡片向上翻過，不想留的向左收進待刪，其餘繼續保留。",
+    keepLabel: "保留",
     memoryLabel: "回憶",
     skipLabel: "這張不想留",
     pendingShort: "待刪",
