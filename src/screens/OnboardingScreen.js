@@ -7,7 +7,7 @@ import { useI18n } from '../i18n';
 import { colors } from '../theme';
 import OnboardingExperience from '../components/OnboardingExperience';
 
-// Access remains independent of the isolated, replayable tutorial.
+// Access remains independent of the passive, replayable value animation.
 export default function OnboardingScreen({ onComplete }) {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
@@ -55,11 +55,11 @@ export default function OnboardingScreen({ onComplete }) {
       <OnboardingExperience paused={requesting || denied} />
       </ScrollView>
       <View style={styles.footer}>
-        <Text style={styles.privacy}>{t('onboarding.privacyBody')}</Text>
         {denied ? <Text style={styles.denied}>{t('onboarding.privacyDenied')}</Text> : null}
         <JellyPressable style={styles.cta} onPress={start} disabled={requesting} accessibilityLabel={t(denied ? 'onboarding.privacySettingsBtn' : 'onboarding.startBtn')} accessibilityState={{ busy: requesting }}>
           {requesting ? <ActivityIndicator color="#111827" /> : <Text style={styles.ctaText}>{t(denied ? 'onboarding.privacySettingsBtn' : 'onboarding.startBtn')}</Text>}
         </JellyPressable>
+        <Text style={styles.privacy}>{t('onboarding.privacyBody')}</Text>
         {denied ? <JellyPressable style={styles.secondary} onPress={() => finish()}><Text style={styles.privacy}>{t('onboarding.privacyNotNow')}</Text></JellyPressable> : null}
       </View>
     </View>
