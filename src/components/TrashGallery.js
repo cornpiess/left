@@ -109,6 +109,7 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
   const [previewIndex, setPreviewIndex] = useState(null);
   const [previewDetails, setPreviewDetails] = useState(false);
   const [previewMeta, setPreviewMeta] = useState(null);
+  const [previewViewport, setPreviewViewport] = useState({ width: 0, height: 0 });
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [deleteNotice, setDeleteNotice] = useState(false);
@@ -286,6 +287,18 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
   const previewDismissY = useRef(new Animated.Value(0)).current;
   const previewDrag = useRef({ version: 0, position: 0, min: 0, dragging: false, ready: false }).current;
   const previewDismissing = useRef(false);
+  const previewWidth = previewViewport.width;
+  const previewHeight = previewViewport.height;
+  const lastPreviewWidthRef = useRef(previewWidth);
+
+  // A rotation/resized window must retain the selected asset, not the old
+  // horizontal pixel offset. Page height comes from this same measured box.
+  useEffect(() => {
+    if (lastPreviewWidthRef.current !== previewWidth && previewIndex !== null) {
+      previewListRef.current?.scrollToOffset({ offset: previewIndex * previewWidth, animated: false });
+    }
+    lastPreviewWidthRef.current = previewWidth;
+  }, [previewWidth, previewIndex]);
 
   useEffect(() => () => {
     dismissDrag.version++;
@@ -443,16 +456,17 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
         ]}
         {...previewVerticalPan.panHandlers}
       >
-        <FlatList
+        {previewWidth > 0 && previewHeight > 0 ? <FlatList
           ref={previewListRef}
+          style={styles.previewList}
           data={items}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           initialScrollIndex={previewIndex !== null ? previewIndex : 0}
-          getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+          getItemLayout={(_, i) => ({ length: previewWidth, offset: previewWidth * i, index: i })}
           onMomentumScrollEnd={(e) => {
-            const nextIdx = Math.max(0, Math.min(items.length - 1, Math.round(e.nativeEvent.contentOffset.x / width)));
+            const nextIdx = Math.max(0, Math.min(items.length - 1, Math.round(e.nativeEvent.contentOffset.x / previewWidth)));
             if (nextIdx !== previewIndex) {
               setPreviewIndex(nextIdx);
               setPreviewDetails(false);
@@ -463,7 +477,7 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
             const uri = photoUri(item);
             const nativePreview = !uri && !isVideoAsset(item) ? item.previewUri : null;
             return (
-              <View style={[styles.previewSlide, { width, height }]}>
+              <View style={[styles.previewSlide, { width: previewWidth, height: previewHeight }]}>
                 {isVideoAsset(item) && item.displayUri ? (
                   isCurrent ? <TrashVideoPreview key={item.id} uri={item.displayUri} /> : null
                 ) : supportsNativePhotoPreview && !isVideoAsset(item) ? (
@@ -479,7 +493,7 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
             );
           }}
           keyExtractor={(it) => it.id}
-        />
+        /> : null}
 
         {previewDetails ? (
           <GlassPanel style={styles.previewDetails} radius={22} intensity={52}>
@@ -528,7 +542,14 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
           </GlassPanel>
         </View>
 
-        <View style={{ flex: 1 }} pointerEvents={deleting ? 'none' : 'auto'}>
+        <View
+          style={{ flex: 1 }}
+          pointerEvents={deleting ? 'none' : 'auto'}
+          onLayout={({ nativeEvent: { layout } }) => {
+            setPreviewViewport(previous => previous.width === layout.width && previous.height === layout.height
+              ? previous : { width: layout.width, height: layout.height });
+          }}
+        >
           {previewIndex === null ? renderGrid() : renderPreview()}
         </View>
         {previewIndex === null && items.length > 0 ? (
@@ -688,6 +709,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#000',
   },
+  previewList: { flex: 1 },
   previewImg: {
     flex: 1,
     width: '100%',

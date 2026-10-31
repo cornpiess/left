@@ -795,7 +795,7 @@ function MemoryCard({
     scale: 1,
     panX: 0,
     panY: 0,
-    baseDist: 1,
+    baseDist: 0,
     baseScale: 1,
     basePanX: 0,
     basePanY: 0,
@@ -803,13 +803,11 @@ function MemoryCard({
   });
   zoomStateRef.current.canZoom = canZoom;
   const longPressRef = useRef(null);
+  const touchRef = useRef({ x: 0, y: 0, startAt: 0, moved: false, count: 0, longPressed: false });
   const gestureDirectionRef = useRef('idle');
   const horizontalGestureRef = useRef(false);
   const onPinchInRef = useRef(onPinchIn);
-
-  useEffect(() => {
-    onPinchInRef.current = onPinchIn;
-  }, [onPinchIn]);
+  onPinchInRef.current = onPinchIn;
 
   // Preparing a neighbouring video is independent of playback ownership.
   // A retained player stays mounted while scrolling, but is immediately muted.
@@ -1039,6 +1037,11 @@ function MemoryCard({
     favBurst.setValue(0);
     trashingRef.current = false;
     dismissingRef.current = false;
+    zoomStateRef.current.mode = 'none';
+    zoomStateRef.current.baseDist = 0;
+    zoomStateRef.current.pinchAnchor = null;
+    touchRef.current.count = 0;
+    touchRef.current.moved = true;
     setHorizontalGesture(false);
   }, [item?.id, gesture, translateX, favBurst, setHorizontalGesture]);
 
@@ -1096,6 +1099,71 @@ function MemoryCard({
     [allowFeedGestures, lockDirection]
   );
 
+  // Establish the baseline when the second finger lands, before responder
+  // ownership/movement. All media use this path, including non-zoomable video.
+  const beginPinch = useCallback((e) => {
+    if (trashingRef.current) return false;
+    const distance = pinchDist(e);
+    if (distance <= 0) return false;
+    const z = zoomStateRef.current;
+    if (z.mode === 'pinch') {
+      if (z.baseDist <= 0) {
+        z.baseDist = distance;
+        z.baseScale = z.scale;
+      }
+      return true;
+    }
+    gesture.dragging = false;
+    gesture.version++;
+    gesture.movedRef = true;
+    settleMotion(translateX, 0, { reduced: reduceMotion }).start();
+    clearTimeout(longPressRef.current);
+    setVideoRate(1);
+    z.mode = 'pinch';
+    z.baseDist = distance;
+    z.baseScale = z.scale;
+    z.pinchAnchor = latestItemRef.current;
+    z.dayBrowseTriggered = false;
+    silenceAllPlayers();
+    gestureMuteRef.current = true;
+    setHorizontalGesture(true);
+    return true;
+  }, [gesture, translateX, reduceMotion, setHorizontalGesture]);
+
+  const movePinch = useCallback((e) => {
+    const z = zoomStateRef.current;
+    if (z.mode !== 'pinch' || z.dayBrowseTriggered) return;
+    const distance = pinchDist(e);
+    if (distance <= 0 || z.baseDist <= 0) return;
+    const rawScale = z.baseScale * distance / z.baseDist;
+    if (rawScale < 0.92 && onPinchInRef.current) {
+      // Latch until ALL fingers lift: no repeated entry, zoom, tap or swipe.
+      z.dayBrowseTriggered = true;
+      silenceAllPlayers();
+      onPinchInRef.current(z.pinchAnchor);
+      return;
+    }
+    if (z.canZoom) {
+      z.scale = Math.min(Math.max(rawScale, 1), MAX_ZOOM);
+      zoomScale.setValue(z.scale);
+      updateZoomed(z.scale > 1.02);
+    }
+  }, [zoomScale, updateZoomed]);
+
+  const finishPinch = useCallback(() => {
+    const z = zoomStateRef.current;
+    if (z.mode !== 'pinch' && z.mode !== 'pan') return;
+    if (z.scale <= 1.02) resetZoom();
+    setHorizontalGesture(false);
+    if (!z.dayBrowseTriggered) resumeGestureAudio();
+    touchRef.current.count = 0;
+    touchRef.current.moved = true;
+    z.mode = 'none';
+    z.baseDist = 0;
+    z.pinchAnchor = null;
+    gestureDirectionRef.current = 'idle';
+  }, [resetZoom, setHorizontalGesture, resumeGestureAudio]);
+
   useEffect(
     () => () => setHorizontalGesture(false),
     [setHorizontalGesture]
@@ -1108,12 +1176,12 @@ function MemoryCard({
         onStartShouldSetPanResponderCapture: (e, g) => {
           if (trashingRef.current) return false;
           const touches = e?.nativeEvent?.touches ? e.nativeEvent.touches.length : g.numberActiveTouches;
-          return touches >= 2;
+          return touches >= 2 && beginPinch(e);
         },
         onStartShouldSetPanResponder: (e, g) => {
           if (trashingRef.current) return false;
           const touches = e?.nativeEvent?.touches ? e.nativeEvent.touches.length : g.numberActiveTouches;
-          return touches >= 2 || zoomedRef.current;
+          return (touches >= 2 && beginPinch(e)) || zoomedRef.current;
         },
         onMoveShouldSetPanResponderCapture: shouldCaptureHorizontal,
         onMoveShouldSetPanResponder: shouldCaptureHorizontal,
@@ -1126,24 +1194,21 @@ function MemoryCard({
           const touches = e?.nativeEvent?.touches ? e.nativeEvent.touches.length : g.numberActiveTouches;
           const isPinch = touches >= 2;
           const isPan = !isPinch && zoomedRef.current;
-          z.mode = isPinch ? 'pinch' : isPan ? 'pan' : 'swipe';
           // PRD 5.2: 0ms mute at gesture start — BEFORE the direction is even
           // decided. This is the only leave-path that had no silence entry:
           // during a captured drag (left-swipe delete) audio used to keep
           // playing until the release commit raced the JS thread.
           silenceAllPlayers();
           gestureMuteRef.current = true;
-          if (z.mode === 'pinch') {
-            z.baseDist = pinchDist(e) || 1;
-            z.baseScale = z.scale;
-            z.dayBrowseTriggered = false;
-            // Freeze vertical scrolling on outer FlatList instantly to prevent vertical displacement
-            h.setHorizontalGesture(true);
-          } else if (z.mode === 'pan') {
+          if (isPinch || z.mode === 'pinch') {
+            beginPinch(e);
+          } else if (isPan) {
+            z.mode = 'pan';
             z.basePanX = z.panX;
             z.basePanY = z.panY;
             h.setHorizontalGesture(true);
           } else {
+            z.mode = 'swipe';
             beginMotionDrag(h.translateX, h.gesture, g.dx);
             h.gesture.releaseVelocity = 0;
             h.clearFade();
@@ -1152,41 +1217,18 @@ function MemoryCard({
           }
         },
 
+        // A second finger may arrive AFTER a one-finger swipe was granted.
+        onPanResponderStart: (e) => { beginPinch(e); },
+
         onPanResponderMove: (e, g) => {
           const h = handlerRef.current;
           const z = zoomStateRef.current;
           const touches = e?.nativeEvent?.touches ? e.nativeEvent.touches.length : g.numberActiveTouches;
           if (touches >= 2) {
-            if (z.mode !== 'pinch') {
-              h.gesture.dragging = false;
-              h.gesture.version++;
-              settleMotion(h.translateX, 0, { reduced: h.reduceMotion }).start();
-              z.mode = 'pinch';
-              z.baseDist = pinchDist(e) || 1;
-              z.baseScale = z.scale;
-              clearTimeout(longPressRef.current);
-              h.setHorizontalGesture(true);
-            }
+            beginPinch(e);
           }
           if (z.mode === 'pinch') {
-            const d = pinchDist(e);
-            if (d > 0) {
-              const rawScale = z.baseScale * (d / z.baseDist);
-              // Ultra-sensitive & 100% deterministic Pinch-In threshold:
-              // Triggers Day Browse when fingers move inward by just 8% (rawScale < 0.92)
-              if (rawScale < 0.92 && !z.dayBrowseTriggered) {
-                z.dayBrowseTriggered = true;
-                silenceAllPlayers();
-                onPinchInRef.current?.(item);
-                return;
-              }
-              if (z.canZoom) {
-                const s = Math.min(Math.max(rawScale, 1), MAX_ZOOM);
-                z.scale = s;
-                zoomScale.setValue(s);
-                h.updateZoomed(s > 1.02);
-              }
-            }
+            movePinch(e);
           } else if (z.mode === 'pan') {
             if (Math.abs(g.dx) + Math.abs(g.dy) > 10) {
               clearTimeout(longPressRef.current);
@@ -1213,11 +1255,10 @@ function MemoryCard({
           clearTimeout(longPressRef.current);
           setVideoRate(1);
           if (z.mode === 'pinch') {
-            if (z.scale <= 1.02) h.resetZoom();
-            h.resumeGestureAudio();
+            finishPinch();
           } else if (z.mode === 'pan') {
             if (Math.abs(g.dx) + Math.abs(g.dy) <= 8) h.handleZoomDoubleTap();
-            h.resumeGestureAudio();
+            finishPinch();
           } else if (z.mode === 'swipe') {
             if (!h.gesture.ready) {
               // A very quick release can beat the native stop callback. Wait
@@ -1259,21 +1300,21 @@ function MemoryCard({
           if (z.mode === 'swipe') {
             settleMotion(h.translateX, 0, { reduced: h.reduceMotion }).start();
             h.setHorizontalGesture(false);
-          } else if (z.mode === 'pinch' && z.scale <= 1.02) {
-            h.resetZoom();
+          } else if (z.mode === 'pinch' || z.mode === 'pan') {
+            finishPinch();
           }
           // Gesture was interrupted without committing anything — resume.
-          h.resumeGestureAudio();
+          if (!z.dayBrowseTriggered) h.resumeGestureAudio();
           z.mode = 'none';
           gestureDirectionRef.current = 'idle';
         },
       }),
-    [shouldCaptureHorizontal, winWidth, height]
+    [shouldCaptureHorizontal, winWidth, height, beginPinch, movePinch, finishPinch]
   );
 
   // Tap / long-press detection via raw touch events (does not fight the FlatList).
-  const touchRef = useRef({ x: 0, y: 0, startAt: 0, moved: false, count: 1, longPressed: false });
   const onTouchStart = useCallback((e) => {
+    beginPinch(e);
     const { pageX, pageY } = e.nativeEvent;
     const count = e.nativeEvent.touches.length;
     touchRef.current = {
@@ -1281,13 +1322,13 @@ function MemoryCard({
       y: pageY,
       startAt: Date.now(),
       moved: false,
-      count,
+      count: Math.max(count, touchRef.current.count),
       longPressed: false,
     };
     gestureDirectionRef.current = 'undecided';
-    gesture.movedRef = false;
+    gesture.movedRef = zoomStateRef.current.mode === 'pinch';
     clearTimeout(longPressRef.current);
-    if (count === 1) {
+    if (count === 1 && zoomStateRef.current.mode !== 'pinch') {
       longPressRef.current = setTimeout(() => {
         const t = touchRef.current;
         if (t.moved) return;
@@ -1295,9 +1336,10 @@ function MemoryCard({
         handleLongPressRef.current?.();
       }, LONG_PRESS_MS);
     }
-  }, []);
+  }, [beginPinch]);
   const onTouchMove = useCallback(
     (e) => {
+      if (zoomStateRef.current.mode === 'pinch') movePinch(e);
       const { pageX, pageY } = e.nativeEvent;
       const t = touchRef.current;
       if (Math.abs(pageX - t.x) > 10 || Math.abs(pageY - t.y) > 10) {
@@ -1306,15 +1348,23 @@ function MemoryCard({
         setVideoRate(1);
       }
     },
-    []
+    [movePinch]
   );
   const onTouchEnd = useCallback(
     (e) => {
       const t = touchRef.current;
-      if (e.nativeEvent.touches.length > 0) return;
+      if (e.nativeEvent.touches.length > 0) {
+        if (e.nativeEvent.touches.length < 2 && zoomStateRef.current.mode === 'pinch') {
+          zoomStateRef.current.baseDist = 0;
+        }
+        return;
+      }
+      if (zoomStateRef.current.mode === 'pinch') finishPinch();
       gestureDirectionRef.current = 'idle';
-      if (t.count > 1) return;
       clearTimeout(longPressRef.current);
+      const wasMultiTouch = t.count > 1;
+      t.count = 0;
+      if (wasMultiTouch) return;
       const wasLongPress = t.longPressed;
       t.longPressed = false;
       setVideoRate(1);
@@ -1336,7 +1386,7 @@ function MemoryCard({
       }
       // single photos / live photos: tap intentionally does nothing
     },
-    [handleTap, onGroupNext, groupCount, isVideo, winWidth, height]
+    [handleTap, onGroupNext, groupCount, isVideo, winWidth, height, finishPinch]
   );
 
   // Auto-resume a fresh item (also when advancing within a burst group).
@@ -1737,6 +1787,13 @@ function MemoryCard({
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
+      onTouchCancel={() => {
+        clearTimeout(longPressRef.current);
+        setVideoRate(1);
+        touchRef.current.count = 0;
+        touchRef.current.moved = true;
+        finishPinch();
+      }}
     >
       <View style={styles.mediaArea}>
         {showAmbient ? (

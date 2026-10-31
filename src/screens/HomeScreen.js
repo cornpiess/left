@@ -288,7 +288,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
         experience.reset();
         await resetBrowseSession();
         if (token !== loadGenerationRef.current) return;
-        setDayBrowse(null); daySessionRef.current = null;
+        setDayBrowse(null); daySessionRef.current = null; dayOpenRequestRef.current = null;
         rawAssetsRef.current = []; feedRef.current = []; setFeed([]);
         burstPosRef.current.clear();
       }
@@ -630,10 +630,14 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
   const dayBrowseAnchorIndexRef = useRef(0);
   const daySessionRef = useRef(null);
   const dayLoadRef = useRef(new Set());
+  const dayOpenRequestRef = useRef(null);
 
   const enterDayBrowse = useCallback(
     async (anchor) => {
-      if (!anchor || dayBrowse) return;
+      if (!anchor || dayBrowse || dayOpenRequestRef.current) return;
+      const request = {};
+      dayOpenRequestRef.current = request;
+      silenceAllPlayers();
       // Record the exact main feed index where the user pinched in!
       dayBrowseAnchorIndexRef.current = activeIndexRef.current;
 
@@ -652,17 +656,21 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
         daySessionRef.current = session;
         const before = await fetchDayPage(session, 'before');
         const after = await fetchDayPage(session, 'after');
-        if (daySessionRef.current !== session) return;
+        if (dayOpenRequestRef.current !== request || daySessionRef.current !== session) return;
         const items = [...before, anchor, ...after];
         const initialIndex = before.length;
         setDayWindowIndex(initialIndex);
         setDayBrowse({ items, initialIndex, loading: false, hasBefore: session.more('before'), hasAfter: session.more('after') });
       } catch {
-        setDayBrowse(null);
+        if (dayOpenRequestRef.current !== request) return;
+        // The gesture succeeded even if neighbour retrieval fails. Keep its
+        // anchor visible and report the failure instead of silently bouncing.
+        setDayBrowse({ items: [anchor], initialIndex: 0, loading: false });
+        showToast(t('home.toastMoveFailed'));
         setScrolling(false);
       }
     },
-    [dayBrowse, makeFeed, activeVideoPlayer]
+    [dayBrowse, activeVideoPlayer, showToast, t]
   );
 
   const loadDaySide = useCallback(async side => {
@@ -697,6 +705,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
         setActiveVideoPlayer(null);
       }
       daySessionRef.current = null;
+      dayOpenRequestRef.current = null;
       getBrowseSession().leaveDay();
       void persistBrowseSession().catch(() => {});
       setDayBrowse(null);
@@ -1184,7 +1193,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
               onGroupNext={() => {}}
               onZoomStateChange={setCardZoomed}
               onHorizontalGestureChange={handleHorizontalGestureChange}
-              onPinchIn={() => {}}
+              onPinchIn={enterDayBrowse}
               showInfo={false}
               onVideoPlayerChange={handleVideoPlayerChange}
               allowFeedGestures={false}

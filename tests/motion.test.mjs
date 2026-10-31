@@ -146,7 +146,7 @@ test('a re-grabbed downward panel stays inside its top boundary', () => {
 
 const touch = { nativeEvent: { touches: [{ pageX: 100, pageY: 100 }] } };
 const gesture = (dx, vx = 0) => ({ dx, dy: 0, vx, vy: 0, numberActiveTouches: 1 });
-function card({ prepare = async () => true, delayedStop = false, favorite } = {}) {
+function card({ prepare = async () => true, delayedStop = false, favorite, memoized = false } = {}) {
   const driver = nativeDriver({ delayedStop });
   const removed = [], favorites = [], haptics = [];
   const props = {
@@ -159,11 +159,189 @@ function card({ prepare = async () => true, delayedStop = false, favorite } = {}
     'react-native': driver.native,
     'expo-haptics': { ImpactFeedbackStyle: { Light: 'light' }, impactAsync: type => { haptics.push(type); return Promise.resolve(); } },
     ...(favorite ? { '../media': { isVideoAsset: () => false, isItemFavorite: () => false, toggleFavorite: favorite } } : {}),
-  });
+  }, { memoized });
   const render = () => flatten(runtime.render()).find(node => node.props.onPanResponderRelease).props;
   const handlers = render();
   return { ...driver, runtime, props, handlers, render, removed, favorites, haptics };
 }
+
+const pinchTouch = distance => ({ nativeEvent: {
+  pageX: 100, pageY: 100,
+  touches: [{ identifier: 0, pageX: 100, pageY: 100 }, { identifier: 1, pageX: 100 + distance, pageY: 100 }],
+} });
+const lifted = { nativeEvent: { touches: [] } };
+
+for (const kind of ['photo', 'live', 'video', 'burst']) {
+  test(`${kind}: inward pinch enters the day exactly once and does not become a tap or delete`, () => {
+    const c = card({ memoized: true }), entered = [], locks = [], taps = [];
+    Object.assign(c.props, {
+      item: { ...c.props.item, mediaType: kind === 'video' ? 'video' : 'photo', isLive: kind === 'live' },
+      groupCount: kind === 'burst' ? 3 : 1,
+      onPinchIn: item => entered.push(item.id), onHorizontalGestureChange: value => locks.push(value),
+      onGroupNext: () => taps.push('next'),
+    });
+    const h = c.render();
+    h.onTouchStart(pinchTouch(100));
+    h.onPanResponderGrant(pinchTouch(100), gesture(0));
+    h.onPanResponderMove(pinchTouch(90), gesture(-70));
+    h.onPanResponderMove(pinchTouch(70), gesture(-100));
+    h.onTouchEnd(lifted);
+    h.onPanResponderRelease(lifted, gesture(-100, -1));
+    assert.deepEqual(entered, ['a']);
+    assert.deepEqual(locks, [true, false]);
+    assert.deepEqual(taps, []);
+    assert.deepEqual(c.removed, []);
+  });
+}
+
+test('a late responder grant preserves the distance from second-finger touchdown', () => {
+  const c = card(), entered = [];
+  c.props.onPinchIn = item => entered.push(item.id);
+  const h = c.render();
+  assert.equal(h.onStartShouldSetPanResponderCapture(pinchTouch(100), gesture(0)), true);
+  h.onPanResponderGrant(pinchTouch(94), gesture(0));
+  h.onPanResponderMove(pinchTouch(90), gesture(0));
+  assert.deepEqual(entered, ['a']);
+  h.onTouchEnd(lifted);
+});
+
+test('adding a second finger upgrades an owned swipe before its first pinch move', () => {
+  const c = card(), entered = [];
+  c.props.onPinchIn = item => entered.push(item.id);
+  const h = c.render();
+  h.onPanResponderGrant(touch, gesture(-20));
+  h.onPanResponderStart(pinchTouch(100));
+  h.onPanResponderMove(pinchTouch(90), gesture(-80));
+  h.onPanResponderRelease(lifted, gesture(-80, -1));
+  assert.deepEqual(entered, ['a']);
+  assert.deepEqual(c.removed, []);
+});
+
+test('raw touch delivery shares recognition when a native child delays responder ownership', () => {
+  const c = card(), entered = [], locks = [];
+  c.props.onPinchIn = item => entered.push(item.id);
+  c.props.onHorizontalGestureChange = value => locks.push(value);
+  const h = c.render();
+  h.onTouchStart(pinchTouch(100));
+  h.onTouchMove(pinchTouch(90));
+  h.onTouchEnd(lifted);
+  assert.deepEqual(entered, ['a']);
+  assert.deepEqual(locks, [true, false]);
+});
+
+test('an uncommitted/cancelled pinch unlocks and a subsequent pinch works', () => {
+  for (const end of ['onPanResponderRelease', 'onPanResponderTerminate', 'onTouchCancel']) {
+    const c = card(), entered = [], locks = [];
+    c.props.onPinchIn = item => entered.push(item.id);
+    c.props.onHorizontalGestureChange = value => locks.push(value);
+    const h = c.render();
+    h.onTouchStart(pinchTouch(100));
+    h.onPanResponderGrant(pinchTouch(100), gesture(0));
+    h.onPanResponderMove(pinchTouch(96), gesture(0));
+    h[end](lifted, gesture(0));
+    assert.deepEqual(entered, []);
+    assert.equal(locks.at(-1), false, end);
+    h.onTouchStart(pinchTouch(100));
+    h.onPanResponderMove(pinchTouch(90), gesture(0));
+    h.onTouchEnd(lifted);
+    assert.deepEqual(entered, ['a'], end);
+  }
+});
+
+test('a memoized responder uses the current burst frame and latest day-entry callback', () => {
+  const c = card({ memoized: true }), entered = [];
+  c.props.onPinchIn = () => entered.push('old callback');
+  c.props.groupCount = 3;
+  const old = c.render();
+  c.props.item = { ...c.props.item, id: 'burst-frame-2' };
+  c.props.onPinchIn = item => entered.push(item.id);
+  const current = c.render();
+  assert.equal(old.onPanResponderMove, current.onPanResponderMove, 'exercise retained responder closure');
+  current.onPanResponderGrant(pinchTouch(100), gesture(0));
+  current.onPanResponderMove(pinchTouch(90), gesture(0));
+  current.onPanResponderRelease(lifted, gesture(0));
+  assert.deepEqual(entered, ['burst-frame-2']);
+});
+
+test('shrinking a magnified photo reduces zoom before entering its day', () => {
+  const c = card(), entered = [];
+  c.props.onPinchIn = item => entered.push(item.id);
+  const h = c.render();
+  h.onPanResponderGrant(pinchTouch(100), gesture(0));
+  h.onPanResponderMove(pinchTouch(200), gesture(0));
+  h.onPanResponderRelease(lifted, gesture(0));
+  h.onPanResponderGrant(pinchTouch(100), gesture(0));
+  h.onPanResponderMove(pinchTouch(80), gesture(0));
+  assert.deepEqual(entered, []);
+  h.onPanResponderMove(pinchTouch(45), gesture(0));
+  h.onPanResponderRelease(lifted, gesture(0));
+  assert.deepEqual(entered, ['a']);
+});
+
+test('cancelled video pinches resume audio, while committed day entry keeps it silent', () => {
+  const c = card(); let plays = 0;
+  c.props.item = { ...c.props.item, mediaType: 'video', displayUri: 'file://video.mov' };
+  c.props.onPinchIn = () => {};
+  const player = { muted: true, volume: 0, playing: false,
+    play() { plays++; this.playing = true; }, pause() { this.playing = false; } };
+  flatten(c.runtime.render()).find(n => n.type?.name === 'MemoryVideo').props.onPlayerChange(player);
+  const h = c.render();
+  h.onPanResponderGrant(pinchTouch(100), gesture(0));
+  h.onPanResponderMove(pinchTouch(96), gesture(0));
+  h.onPanResponderRelease(lifted, gesture(0));
+  assert.equal(plays, 1);
+  h.onPanResponderGrant(pinchTouch(100), gesture(0));
+  h.onPanResponderMove(pinchTouch(90), gesture(0));
+  h.onPanResponderRelease(lifted, gesture(0));
+  assert.equal(plays, 1);
+  assert.equal(player.muted, true);
+  assert.equal(player.playing, false);
+});
+
+test('a cancelled pinch does not swallow the next one-finger burst tap', () => {
+  const c = card(); let turns = 0;
+  c.props.groupCount = 3;
+  c.props.onGroupNext = () => turns++;
+  const h = c.render();
+  h.onTouchStart(pinchTouch(100));
+  h.onTouchCancel();
+  h.onTouchStart(touch);
+  h.onTouchEnd(lifted);
+  assert.equal(turns, 1);
+});
+
+test('trash preview sizes and centres every media page in its measured content viewport', async () => {
+  const driver = nativeDriver();
+  let dimensions = { width: 393, height: 852 };
+  const items = ['photo', 'video'].map((mediaType, index) => ({ id: `asset-${index}`, mediaType, displayUri: `ph://asset-${index}` }));
+  const c = renderComponent('components/TrashGallery.js', { visible: true }, {
+    'react-native': { ...driver.native, useWindowDimensions: () => dimensions },
+    '../media': { fetchTrashSummary: async () => ({ items, count: 2, sizeBytes: 100, unknownCount: 0 }), isVideoAsset: item => item.mediaType === 'video' },
+    '../nativePhotoPreview': { supportsNativePhotoPreview: true },
+  }, { effects: true });
+  let tree = flatten(c.render());
+  tree.find(n => n.props.onLayout).props.onLayout({ nativeEvent: { layout: { width: 393, height: 724 } } });
+  c.flushEffects();
+  await tick();
+  tree = flatten(c.render());
+  const grid = tree.find(n => n.props.numColumns === 3);
+  flatten(grid.props.renderItem({ item: items[0], index: 0 })).find(n => n.props.onPress).props.onPress();
+  let preview = flatten(c.render()).find(n => n.props.horizontal);
+  for (const [index, item] of items.entries()) {
+    const slide = preview.props.renderItem({ item, index });
+    assert.equal(slide.props.style.at(-1).height, 724);
+    assert.equal(slide.props.style[0].justifyContent, 'center');
+  }
+  dimensions = { width: 852, height: 393 };
+  tree = flatten(c.render());
+  tree.find(n => n.props.onLayout).props.onLayout({ nativeEvent: { layout: { width: 852, height: 320 } } });
+  preview = flatten(c.render()).find(n => n.props.horizontal);
+  const layout = preview.props.getItemLayout(null, 1);
+  assert.equal(layout.length, 852);
+  assert.equal(layout.offset, 852);
+  assert.equal(preview.props.renderItem({ item: items[0], index: 0 }).props.style.at(-1).height, 320);
+  c.unmount();
+});
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 test('actual swipe keeps short-drag cancellation and lets the next drag catch its return', () => {
