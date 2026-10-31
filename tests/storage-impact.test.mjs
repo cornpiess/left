@@ -53,3 +53,10 @@ test('sortAndShuffleByStorageImpact places large impact units ahead of standard 
   const lastUnit = sorted[sorted.length - 1];
   assert.equal(lastUnit.items[0].id, 'photo-1', 'Small photo should be sorted behind high impact units');
 });
+
+test('legacy video duration stays in seconds and storage priority is monotonic across ten minutes', () => {
+  const score = duration => computeStorageImpactScore({ items: [{ id: 'v', mediaType: 'video', duration }] });
+  assert.ok(score(601) > score(600));
+  assert.ok(score(3600) > score(601));
+  assert.ok(Number.isFinite(score(NaN)));
+});

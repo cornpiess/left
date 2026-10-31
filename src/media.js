@@ -208,6 +208,11 @@ export function getRecommendMode() {
   return currentRecommendMode;
 }
 
+function orderRecommendationUnits(units) {
+  const randomized = shuffle(units);
+  return currentRecommendMode === 'storage' ? sortAndShuffleByStorageImpact(randomized) : randomized;
+}
+
 export async function setRecommendMode(mode) {
   if (mode !== 'default' && mode !== 'storage') return currentRecommendMode;
   currentRecommendMode = mode;
@@ -366,6 +371,9 @@ export async function markAssetViewed(item) {
   await ensureReviewState();
   const changed = USE_MOCK ? !viewedIds.has(item.id) : await reviewStore.review(item.id);
   viewedIds.add(item.id);
+  if (browsing.state.day && browsing.pruneReviewedAhead(new Set([item.id]))) {
+    mediaUpdateListeners.forEach(listener => listener({ type: 'browse-reconciled' }));
+  }
   memorySession?.failedDisplayIds.delete(item.id);
   if (changed) reviewedCount++;
   return changed;
@@ -457,6 +465,7 @@ export function isItemFavorite(item) {
 
 /** Attach app-level metadata to a legacy asset returned by the OS. */
 function extendAsset(a) {
+  a.mediaType = isVideoAsset(a) ? 'video' : 'photo';
   a.isTrash = trashIds.has(a.id);
   a.isLive = Array.isArray(a.mediaSubtypes) && a.mediaSubtypes.includes('livePhoto');
   a.livePhotoUri = null;
@@ -605,10 +614,7 @@ async function prepareInitialSession() {
   // Pre-process bursts for the initial sample batch
   assignBursts(sampleAssets);
   const units = buildBurstUnits(sampleAssets).map(unit => ({ ...unit, items: unit.items.filter(item => !reviewed.has(item.id) && !isTrashAsset(item.id)) })).filter(unit => unit.items.length);
-  const orderedInitialUnits = currentRecommendMode === 'storage'
-    ? sortAndShuffleByStorageImpact(units)
-    : shuffle(units);
-  const initialUnits = orderedInitialUnits;
+  const initialUnits = orderRecommendationUnits(units);
   return {
     initialUnits,
     initialOffset: 0,
@@ -641,7 +647,7 @@ export function startBurstDiscovery(session = memorySession) {
       return items.filter(item => !reviewed.has(item.id) && !isTrashAsset(item.id) && !session.seedIds.has(item.id));
     },
     group: items => { items.forEach(extendAsset); assignBursts(items); return buildBurstUnits(items); },
-    order: units => currentRecommendMode === 'storage' ? sortAndShuffleByStorageImpact(units) : shuffle(units),
+    order: orderRecommendationUnits,
   });
   session.discoveryReady = true;
   return Promise.resolve(session);
@@ -1036,16 +1042,16 @@ async function expandNativeEntry(entry, owner, offset = 0) {
   if (!chunk || owner !== browsing) return;
   stampNativeCount(owner, identifier, chunk.count);
   const reviewed = await primeReviewed(chunk.items);
+  if (owner !== browsing) return;
   const knownHere = new Set(entry.unit.items.map(i => i.id));
   const ready = chunk.items.filter(i => (!reviewed.has(i.id) || knownHere.has(i.id)) && !isTrashAsset(i.id));
-  const byId = new Map([...(offset > 0 ? entry.unit.items : []), ...ready].map(i => [i.id, i]));
+  // A randomly sampled representative can be beyond the first native chunk.
+  // Expanding offset zero must retain that seed and its sampled neighbours.
+  const byId = new Map([...entry.unit.items, ...ready].map(i => [i.id, i]));
   entry.unit = { ...entry.unit, nativeId: identifier, nativeOffset: chunk.nextOffset, nativeCount: chunk.count,
-    items: [...byId.values()].sort((a,b) => a.creationTime-b.creationTime || a.id.localeCompare(b.id)) };
+    items: owner.claimEntryItems(entry, [...byId.values()])
+      .sort((a,b) => a.creationTime-b.creationTime || a.id.localeCompare(b.id)) };
   if (!entry.unit.items.length) owner.queueContinuation(entry.unit);
-  // A seed sampled on another page must not later be emitted again.
-  const expanded = new Set(entry.unit.items.map(i => i.id));
-  owner.state.candidates = owner.state.candidates.map(e => ({ ...e, unit: { ...e.unit,
-    items: e.unit.items.filter(i => !expanded.has(i.id)) } })).filter(e => e.unit.items.length);
 }
 
 export async function loadMoreNativeGroup(key) {
@@ -1091,6 +1097,12 @@ async function fetchBrowsePage(after) {
     await photoLoadStage('candidate-refill', () => fillBrowseCandidates(memorySession, owner));
   }
   if (owner !== browsing || revision !== libraryRevision) return { items: [], units: [], hasNextPage: false, stale: true };
+  // Same-day browsing can review a prefetched main-stream card. Keep the
+  // current/history context, but never serve that card again as future content.
+  const ahead = owner.state.entries.filter(e => e.ordinal > owner.state.frontier).flatMap(e => e.unit.items);
+  const reviewedAhead = await primeReviewed(ahead);
+  if (owner !== browsing || revision !== libraryRevision) return { items: [], units: [], hasNextPage: false, stale: true };
+  owner.pruneReviewedAhead(reviewedAhead);
   const entries = owner.take();
   for (const entry of entries) {
     if (!entry.unit.items[0]?.suppressBurstRegroup) await expandNativeEntry(entry, owner);
