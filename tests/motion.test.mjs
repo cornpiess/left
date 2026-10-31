@@ -171,6 +171,39 @@ const pinchTouch = distance => ({ nativeEvent: {
 } });
 const lifted = { nativeEvent: { touches: [] } };
 
+test('centre-of-picture pinches share one hit target for portrait/landscape and every media renderer', () => {
+  for (const [width, height] of [[3000, 4000], [4000, 3000]]) {
+    for (const mediaType of ['photo', 'video']) {
+      const driver = nativeDriver(), entered = [];
+      const item = { id: `${width}-${mediaType}`, width, height, mediaType, displayUri: 'file://media' };
+      const c = renderComponent('components/MemoryCard.js', {
+        item, items: [item], active: true, preload: true, height: 800, showInfo: false,
+        onPinchIn: asset => entered.push(asset.id),
+      }, { 'react-native': driver.native, '../nativePhotoPreview': { supportsNativePhotoPreview: true } });
+      const tree = c.render();
+      const check = (node, passThrough = false) => {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) { node.forEach(child => check(child, passThrough)); return; }
+        const transparent = passThrough || node.props?.pointerEvents === 'none';
+        if (node.props?.assetId || node.type?.name === 'MemoryVideo') assert.ok(transparent, 'media cannot receive the touches');
+        node.children?.forEach(child => check(child, transparent));
+      };
+      check(tree);
+      const h = tree.props;
+      assert.notEqual(h.pointerEvents, 'none', 'the outer card owns multi-touch');
+      const atCentre = distance => {
+        const e = pinchTouch(distance);
+        e.nativeEvent.touches.forEach(touch => { touch.pageY = 400; });
+        return e;
+      };
+      h.onTouchStart(atCentre(100));
+      h.onTouchMove(atCentre(90));
+      h.onTouchEnd(lifted);
+      assert.deepEqual(entered, [item.id]);
+    }
+  }
+});
+
 for (const kind of ['photo', 'live', 'video', 'burst']) {
   test(`${kind}: inward pinch enters the day exactly once and does not become a tap or delete`, () => {
     const c = card({ memoized: true }), entered = [], locks = [], taps = [];

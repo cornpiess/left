@@ -2,6 +2,15 @@
 export const ONBOARDING_CYCLE_MS = 7200;
 export const CARD_HEIGHT = 186;
 export const PAGE_TRAVEL = 218;
+export const SCENE_WIDTH = 280;
+export const SCENE_HEIGHT = 266;
+
+// Scale one fixed vector scene as a whole. Keep typography/art in proportion,
+// and use the measured content space rather than a phone-height breakpoint.
+export function onboardingSceneLayout(availableWidth, availableHeight) {
+  const scale = Math.max(0, Math.min(availableWidth / SCENE_WIDTH, availableHeight / SCENE_HEIGHT, 1.8));
+  return { width: SCENE_WIDTH * scale, height: SCENE_HEIGHT * scale, scale };
+}
 const TRACKS = {
   firstY: [[0, 0], [1.1, 0], [1.65, -218], [5.4, -218], [5.4, 218], [5.7, 218], [6.3, 0], [7.2, 0]],
   selectedY: [[0, 218], [1.1, 218], [1.65, 0], [6.4, 0], [6.4, 218], [7.2, 218]],

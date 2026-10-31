@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Pressable,
   StyleSheet,
@@ -78,6 +79,8 @@ export function JellyPressable({
   hitSlop,
   accessibilityState,
   accessibilityLabel,
+  containerStyle,
+  accessibilityRole = 'button',
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReducedMotion();
@@ -115,14 +118,30 @@ export function JellyPressable({
       disabled={disabled}
       accessibilityState={accessibilityState}
       accessibilityLabel={accessibilityLabel}
+      accessibilityRole={accessibilityRole}
       hitSlop={hitSlop}
-      style={pressableStyle}
+      style={[pressableStyle, containerStyle]}
     >
       <Animated.View style={[{ transform: [{ scale: scaleAnim }] }, style]}>
         {children}
       </Animated.View>
     </Pressable>
   );
+}
+
+// Width belongs to the actual touch target, not to a percentage-sized child
+// of a shrink-wrapped Pressable. Shared by first-run and replay confirmation.
+export function PrimaryButton({ label, onPress, disabled = false, loading = false }) {
+  return <JellyPressable
+    onPress={onPress}
+    disabled={disabled || loading}
+    accessibilityLabel={label}
+    accessibilityState={{ disabled: disabled || loading, busy: loading }}
+    containerStyle={styles.primaryContainer}
+    style={styles.primaryButton}
+  >
+    {loading ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.primaryLabel}>{label}</Text>}
+  </JellyPressable>;
 }
 
 /**
@@ -176,6 +195,10 @@ export function GlassPill({ children, style, icon, iconColor, iconSize = 13 }) {
 }
 
 const styles = StyleSheet.create({
+  primaryContainer: { width: '100%', maxWidth: 420, alignSelf: 'center' },
+  primaryButton: { minHeight: 54, borderRadius: 27, backgroundColor: colors.primary,
+    paddingHorizontal: 24, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
+  primaryLabel: { color: colors.bg, fontSize: 17, lineHeight: 24, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
   btnWrap: {
     alignItems: 'center',
     gap: 6,

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, AppState, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 import { useI18n } from '../i18n';
-import { ONBOARDING_CYCLE_MS, motionConfig } from '../onboardingMotion.mjs';
+import { ONBOARDING_CYCLE_MS, motionConfig, onboardingSceneLayout, SCENE_WIDTH, SCENE_HEIGHT } from '../onboardingMotion.mjs';
 
 // Decorative vectors only. There are no asset IDs, media requests or touch handlers.
 function MemoryOutline({ kind }) {
@@ -23,11 +23,11 @@ function MemoryOutline({ kind }) {
   </Svg>;
 }
 
-export default function OnboardingMotion({ paused = false }) {
+export default function OnboardingMotion({ paused = false, availableWidth, availableHeight }) {
   const { t } = useI18n();
   const { width, height } = useWindowDimensions();
-  const sceneWidth = Math.min(340, Math.max(220, width - 56));
-  const sceneScale = height < 700 ? 0.86 : 1;
+  const sceneWidth = SCENE_WIDTH;
+  const scene = onboardingSceneLayout(availableWidth ?? width - 48, availableHeight ?? height * 0.48);
   const progress = useRef(new Animated.Value(0)).current;
   const [reduceMotion, setReduceMotion] = useState(null);
   const [foreground, setForeground] = useState(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
@@ -55,8 +55,8 @@ export default function OnboardingMotion({ paused = false }) {
   };
   const nextStyle = { transform: [{ translateY: track('nextY') }] };
 
-  return <View style={[styles.scene, { width: sceneWidth, height: 266 * sceneScale }]} pointerEvents="none" accessible accessibilityRole="image" accessibilityLabel={t('onboarding.motionLabel')}>
-    <View style={[styles.canvas, { width: sceneWidth, transform: [{ scale: sceneScale }] }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+  return <View style={[styles.scene, { width: scene.width, height: scene.height }]} pointerEvents="none" accessible accessibilityRole="image" accessibilityLabel={t('onboarding.motionLabel')}>
+    <View style={[styles.canvas, { width: sceneWidth, left: (scene.width - SCENE_WIDTH) / 2, top: (scene.height - SCENE_HEIGHT) / 2, transform: [{ scale: scene.scale }] }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Animated.View style={[styles.receipt, { left: sceneWidth / 2 - 86, opacity: track('receipt') }]}>
         <Svg width={20} height={22} viewBox="0 0 38 44" fill="none">
           <Rect x={.75} y={.75} width={36.5} height={42.5} rx={8} fill="#111218" stroke="#9DA0AC" />

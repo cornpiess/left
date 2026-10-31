@@ -122,6 +122,9 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
   const [scrolling, setScrolling] = useScrollLiveness();
   const [cardZoomed, setCardZoomed] = useState(false);
   const [cardHorizontalGestureActive, setCardHorizontalGestureActive] = useState(false);
+  const cardGestureActiveRef = useRef(false);
+  const pagerScrollBlockedRef = useRef(false);
+  pagerScrollBlockedRef.current = cardZoomed || isLandscape;
   const [trashOpen, setTrashOpen] = useState(false);
   const [undoTrash, setUndoTrash] = useState(null);
   const [activeVideoPlayer, setActiveVideoPlayer] = useState(null);
@@ -579,6 +582,10 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
   }, []);
 
   const handleHorizontalGestureChange = useCallback((active) => {
+    cardGestureActiveRef.current = active;
+    // Stop the native pager when the second finger lands, before the React
+    // state render. Native scrolling must not cancel the card's new pinch.
+    listRef.current?.getNativeScrollRef?.()?.setNativeProps?.({ scrollEnabled: !active && !pagerScrollBlockedRef.current });
     setCardHorizontalGestureActive((current) => (current === active ? current : active));
   }, []);
 
@@ -1285,6 +1292,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
               );
             }}
             pagingEnabled
+            pinchGestureEnabled={false}
             directionalLockEnabled
             scrollEnabled={!cardZoomed && !cardHorizontalGestureActive && !isLandscape}
             showsVerticalScrollIndicator={false}
@@ -1292,6 +1300,9 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
             scrollEventThrottle={16}
             getItemLayout={getItemLayout}
             onScrollBeginDrag={() => {
+              // An already-dispatched native drag event cannot override a
+              // pinch that took ownership after the event was queued.
+              if (cardGestureActiveRef.current) return;
               clearTimeout(settleTimerRef.current);
               silenceAllPlayers();
               setCardHorizontalGestureActive(false);

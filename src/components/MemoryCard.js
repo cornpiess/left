@@ -1795,7 +1795,7 @@ function MemoryCard({
         finishPinch();
       }}
     >
-      <View style={styles.mediaArea}>
+      <View style={styles.mediaArea} pointerEvents="box-none">
         {showAmbient ? (
           <AmbientBackdrop
             source={active || preload ? (ambientSource || (supportsNativePhotoPreview ? `ph://${isBurst ? (burstBackdropAnchorRef.current?.id || items?.[0]?.id || item.id) : item.id}` : null)) : null}
@@ -1876,7 +1876,10 @@ function MemoryCard({
         ) : null}
 
         {/* Card animation layer — ONLY the card moves on swipe / trash / favorite */}
+        {/* Media surfaces only render. PhotoKit/ExpoImage/video must not
+            become separate touch targets in the middle of the picture. */}
         <Animated.View
+          pointerEvents="none"
           style={[
             styles.slide,
             {

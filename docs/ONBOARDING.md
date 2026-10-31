@@ -21,6 +21,14 @@ restart the decorative loop. No timers, frame-based React state or live announce
 All text and the CTA remain usable with no animation. Menu help is a static reference;
 the real feed never automatically displays teaching overlays.
 
+First launch and menu replay centre the value scene within the measured scroll
+viewport. One proportionally scaled vector canvas grows with the available width
+and height; actual title/summary measurements reserve space for long translations
+and larger fonts. Compact/landscape layouts can scroll instead of clipping.
+Menu reference rows follow the first viewport; the confirmation remains outside
+the scroll area. Both entry points use `PrimaryButton`: the touch target owns the
+full available width, with a 420pt cap and 24pt minimum label-side padding.
+
 ## Device acceptance
 
 - Check 320pt iPhones, current phones, iPad and large accessibility fonts in all six languages.

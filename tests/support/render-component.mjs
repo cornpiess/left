@@ -34,7 +34,7 @@ export function renderComponent(file, props={}, overrides={}, options={}) {
  const source=readFileSync(new URL('../../src/'+file,import.meta.url),'utf8');
  const code=babel.transformSync(source,{configFile:false,babelrc:false,plugins:[require.resolve('@babel/plugin-transform-react-jsx'),require.resolve('@babel/plugin-transform-modules-commonjs')]}).code;
  const exports={};vm.runInNewContext(code,{React:react,exports,require:id=>modules[id]||new Proxy({__esModule:true},{get:(o,k)=>k in o?o[k]:universal}),console,Set,Map,Math,Date,Promise,setTimeout,clearTimeout,__DEV__:false});
- return {slots,render:()=>{cursor=0;memoCursor=0;return exports.default(props);},flushEffects:()=>{while(pendingEffects.length)pendingEffects.shift()();},unmount:()=>{effects.forEach(record=>record.cleanup?.());effects.clear();}};
+ return {slots,render:()=>{cursor=0;memoCursor=0;return exports[options.exportName||'default'](props);},flushEffects:()=>{while(pendingEffects.length)pendingEffects.shift()();},unmount:()=>{effects.forEach(record=>record.cleanup?.());effects.clear();}};
 }
 export function flatten(tree) {
  if(Array.isArray(tree))return tree.flatMap(flatten);

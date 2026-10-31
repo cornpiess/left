@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, formatBytes } from '../theme';
 import { getAssetSizeBytes, getPlaceName, isVideoAsset, loadExif, loadItemBasics, isItemFavorite } from '../media';
 import { GlassPanel } from './Glass';
+import { formatGpsCoordinate } from '../mediaPage.mjs';
 
 import { useI18n } from '../i18n';
 
@@ -24,8 +25,7 @@ function DetailLine({ icon, children }) {
 // props are stable primitives or the per-item object reference.
 function MemoryInfoPanel({ item, groupIndex = 0, groupCount = 1, top }) {
   const [expanded, setExpanded] = useState(false);
-  const [place, setPlace] = useState(item?.placeName || '');
-  const [placeShort, setPlaceShort] = useState(item?.placeShortName || '');
+  const [locationInfo, setLocationInfo] = useState(null);
   const [exif, setExif] = useState(null);
   const [size, setSize] = useState(null);
   const isVideo = isVideoAsset(item);
@@ -37,11 +37,15 @@ function MemoryInfoPanel({ item, groupIndex = 0, groupCount = 1, top }) {
     setSize(null);
     let cancelled = false;
     (async () => {
-      await loadItemBasics(item);
-      const name = await getPlaceName(item);
+      let name = '';
+      try {
+        await loadItemBasics(item);
+        name = await getPlaceName(item);
+      } catch {}
       if (!cancelled) {
-        setPlace(name);
-        setPlaceShort(item?.placeShortName || name);
+        const coordinates = formatGpsCoordinate(item?.location);
+        setLocationInfo({ id: item?.id, name: item?.placeName || name || coordinates,
+          shortName: item?.placeShortName || name || coordinates });
       }
     })();
     return () => { cancelled = true; };
@@ -60,6 +64,11 @@ function MemoryInfoPanel({ item, groupIndex = 0, groupCount = 1, top }) {
   }, [expanded, item?.id]);
 
   if (!item) return null;
+  // A recycled panel must not show the previous asset's location, even for
+  // the render before its effect runs. GPS-only photos stay useful offline.
+  const currentLocation = locationInfo?.id === item.id ? locationInfo : null;
+  const place = item.placeName || currentLocation?.name || formatGpsCoordinate(item.location);
+  const placeShort = item.placeShortName || currentLocation?.shortName || place;
   const camera = [exifValue(exif, 'Make'), exifValue(exif, 'Model')].filter((value, index, values) => value && values.indexOf(value) === index).join(' ');
   const dimensions = item.width && item.height ? `${item.width} × ${item.height}` : '';
 
