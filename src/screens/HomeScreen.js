@@ -1077,7 +1077,9 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
       if (entry.unit.items.length > 1) releaseUnviewedBurstFrames(entry.unit.items, null);
       burstPosRef.current.delete(entry.key);
     }
-    const retainedFeed = feedRef.current.slice(keepFrom);
+    const session = getBrowseSession();
+    session.trimBefore(feedRef.current[keepFrom]?.key);
+    const retainedFeed = session.feed(new Set(rawAssetsRef.current.filter(item => isTrashAsset(item.id)).map(item => item.id)));
     const retainedIds = new Set(retainedFeed.flatMap(entry => entry.unit.items.map(item => item.id)));
     rawAssetsRef.current = rawAssetsRef.current.filter(item => retainedIds.has(item.id));
     feedRef.current = retainedFeed;

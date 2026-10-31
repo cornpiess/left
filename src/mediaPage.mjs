@@ -136,9 +136,9 @@ export function computeStorageImpactScore(unit) {
       itemMB = knownBytes / (1024 * 1024);
     } else {
       if (item.mediaType === 'video') {
-        const rawDuration = typeof item.duration === 'number' ? item.duration : 5;
-        // Legacy expo-media-library reports seconds; the next API reports ms.
-        const durationSec = Math.max(3, rawDuration > 600 ? rawDuration / 1000 : rawDuration);
+        // Candidates come from the legacy API, whose duration is in seconds.
+        // Inferring units from length made a 601s video rank below a 600s one.
+        const durationSec = Math.max(3, Number.isFinite(item.duration) ? item.duration : 5);
         itemMB = Math.max(15, durationSec * 3);
       } else if (item.isLive) {
         itemMB = 8;

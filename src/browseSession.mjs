@@ -70,6 +70,18 @@ export function createBrowseSession({ snapshot, epoch = 0, random = Math.random,
   state.deferred = state.deferred.map(restoreItem);
   state.overflow.forEach(unit => { unit.items = unit.items.map(restoreItem); });
   if (state.day?.items) state.day.items = state.day.items.map(restoreItem);
+  // Repair overlapping reservations in snapshots written by older native
+  // expansion code. Main history wins; day browsing is a separate context.
+  const restoredIds = new Set();
+  const uniqueItems = items => items.filter(item => {
+    if (restoredIds.has(item.id)) return false;
+    restoredIds.add(item.id); return true;
+  });
+  for (const field of ['entries', 'candidates']) state[field] = state[field]
+    .map(entry => ({ ...entry, unit: { ...entry.unit, items: uniqueItems(entry.unit.items) } }))
+    .filter(entry => entry.unit.items.length);
+  state.overflow = state.overflow.map(unit => ({ ...unit, items: uniqueItems(unit.items) })).filter(unit => unit.items.length);
+  state.deferred = uniqueItems(state.deferred);
   state.serial = state.serial || state.sequence;
   function ids() {
     return new Set([...state.entries, ...state.candidates].flatMap(e => e.unit.items.map(item => item.id))
@@ -104,6 +116,12 @@ export function createBrowseSession({ snapshot, epoch = 0, random = Math.random,
     ingest(units) {
       const known = ids(), overflow = [];
       let count = api.candidateCount;
+      function enqueue(unit, items) {
+        if (count >= policy.candidateLimit) { overflow.push({ ...unit, items }); return; }
+        count += items.length;
+        state.candidates.push({ key: 'entry-' + state.sessionId + '-' + (++state.serial),
+          unit: { ...unit, items } });
+      }
       for (const unit of units || []) {
         const items = (unit.items || []).filter(item => {
           if (!item?.id || known.has(item.id)) return false;
@@ -119,19 +137,53 @@ export function createBrowseSession({ snapshot, epoch = 0, random = Math.random,
             if (nativeCount) items.forEach(i => { i.nativeBurstCount = nativeCount; });
             existing.unit.items.push(...items); count += items.length;
             existing.unit.items.sort((a,b) => a.creationTime-b.creationTime || a.id.localeCompare(b.id));
+          } else {
+            // A committed deck is immutable. Late unseen members still need
+            // a turn; dropping them here silently exhausts an incomplete library.
+            for (const item of items) enqueue({}, [{ ...item, suppressBurstRegroup: true }]);
           }
           continue;
         }
-        if (count >= policy.candidateLimit) { overflow.push({ ...unit, items }); continue; }
-        items.forEach(item => known.add(item.id)); count += items.length;
-        state.candidates.push({ key: 'entry-' + state.sessionId + '-' + (++state.serial),
-          unit: { ...unit, items } });
+        enqueue(unit, items);
       }
       return overflow;
+    },
+    claimEntryItems(entry, items) {
+      // Native expansion shares the same ownership rule as ingestion. It may
+      // absorb queued candidates, but never steal another committed card.
+      const known = new Set(state.entries.filter(e => e !== entry).flatMap(e => e.unit.items.map(i => i.id)));
+      const accepted = items.filter(item => {
+        if (!item?.id || known.has(item.id)) return false;
+        known.add(item.id); return true;
+      });
+      const claimed = new Set(accepted.map(i => i.id));
+      api.pruneCandidates(claimed);
+      state.overflow = state.overflow.map(unit => ({ ...unit,
+        items: unit.items.filter(i => !claimed.has(i.id)) })).filter(unit => unit.items.length);
+      // memorySession holds this array by reference.
+      const deferred = state.deferred.filter(i => !claimed.has(i.id));
+      state.deferred.splice(0, state.deferred.length, ...deferred);
+      return accepted;
+    },
+    trimBefore(key) {
+      const index = state.entries.findIndex(e => e.key === key);
+      if (index <= 0) return;
+      const removed = state.entries.splice(0, index);
+      for (const entry of removed) delete state.positions[entry.key];
     },
     pruneCandidates(blocked) {
       state.candidates = state.candidates.map(e => ({ ...e, unit: { ...e.unit,
         items: e.unit.items.filter(item => !blocked.has(item.id)) } })).filter(e => e.unit.items.length);
+    },
+    pruneReviewedAhead(reviewed) {
+      let removed = 0;
+      state.entries = state.entries.map(entry => {
+        if (entry.replay || entry.ordinal <= state.frontier || entry.unit.items.some(i => i.id === state.anchorId)) return entry;
+        const items = entry.unit.items.filter(i => !reviewed.has(i.id));
+        removed += entry.unit.items.length - items.length;
+        return { ...entry, unit: { ...entry.unit, items } };
+      }).filter(entry => entry.unit.items.length);
+      return removed;
     },
     take(limit = policy.lookAheadEntries, { allowSinglesFallback = true } = {}) {
       const added = [], rhythm = plannedRhythm();

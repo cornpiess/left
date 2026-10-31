@@ -65,8 +65,12 @@ export function buildBurstUnits(assets) {
     if (!id) { result.push({ items: [item] }); continue; }
     if (emitted.has(id)) continue;
     emitted.add(id);
-    result.push({ burstId: id, groupSource: item.nativeBurstId ? 'native' : 'time',
-      items: item.nativeBurstId ? groups.get(id).sort(compareCaptureOrder).slice(0, getAlgorithmConfig().maxGroupMetadata) : groups.get(id).sort(compareCaptureOrder) });
+    const members = groups.get(id).sort(compareCaptureOrder);
+    const limit = item.nativeBurstId ? getAlgorithmConfig().maxGroupMetadata : members.length;
+    result.push({ burstId: id, groupSource: item.nativeBurstId ? 'native' : 'time', items: members.slice(0, limit) });
+    // The metadata cap bounds a deck, not library coverage. Overflow members
+    // retain native identity but enter the regular single-card schedule.
+    for (const member of members.slice(limit)) result.push({ items: [{ ...member, suppressBurstRegroup: true }] });
   }
   return result;
 }
