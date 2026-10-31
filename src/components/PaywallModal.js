@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -18,12 +18,38 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
   const [catalog, setCatalog] = useState(getIapCatalogState);
   const [pendingAction, setPendingAction] = useState(null);
   const actionRef = useRef(false);
+  const settingsReturnRef = useRef(false);
   const requestClose = () => { if (!actionRef.current) onClose?.(); };
 
   useEffect(() => subscribeIapProducts(setCatalog), []);
   useEffect(() => {
     if (visible && reason === 'menu') void refreshIapCatalog();
   }, [visible, reason]);
+
+  useEffect(() => {
+    if (!visible) { settingsReturnRef.current = false; return undefined; }
+    let previous = AppState.currentState;
+    const subscription = AppState.addEventListener('change', next => {
+      const returned = next === 'active' && previous !== 'active';
+      previous = next;
+      if (!returned || !settingsReturnRef.current) return;
+      settingsReturnRef.current = false;
+      if (!actionRef.current) void refreshIapCatalog();
+    });
+    return () => { settingsReturnRef.current = false; subscription.remove(); };
+  }, [visible]);
+
+  const openNetworkSettings = async () => {
+    if (actionRef.current || settingsReturnRef.current) return;
+    // Retrying prices cannot force a system authorization alert. Use Apple's
+    // supported app-settings route, then refresh once on the explicit return.
+    settingsReturnRef.current = true;
+    try { await Linking.openSettings(); }
+    catch {
+      settingsReturnRef.current = false;
+      onToast?.(t('paywall.networkSettingsFailed'));
+    }
+  };
 
   const membership = getMembershipState();
   const productsMap = catalog.products;
@@ -135,9 +161,15 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
               {catalog.status === 'error' || catalog.status === 'idle' ? (
                 <View style={styles.catalogErrorRow}>
                   <Text style={styles.catalogErrorText}>{t(catalog.status === 'idle' ? 'paywall.loadPricesHint' : 'paywall.catalogUnavailable')}</Text>
-                  <JellyPressable style={styles.catalogRetryBtn} onPress={() => void refreshIapCatalog()}>
-                    <Text style={styles.catalogRetryText}>{t(catalog.status === 'idle' ? 'paywall.loadPrices' : 'paywall.retryCatalog')}</Text>
-                  </JellyPressable>
+                  {catalog.status === 'error' ? <Text style={styles.catalogErrorText}>{t('paywall.networkSettingsHint')}</Text> : null}
+                  <View style={styles.catalogActions}>
+                    <JellyPressable style={styles.catalogRetryBtn} disabled={Boolean(pendingAction)} onPress={() => void refreshIapCatalog()}>
+                      <Text style={styles.catalogRetryText}>{t(catalog.status === 'idle' ? 'paywall.loadPrices' : 'paywall.retryCatalog')}</Text>
+                    </JellyPressable>
+                    {catalog.status === 'error' ? <JellyPressable style={styles.catalogRetryBtn} disabled={Boolean(pendingAction)} onPress={openNetworkSettings}>
+                      <Text style={styles.catalogRetryText}>{t('paywall.openNetworkSettings')}</Text>
+                    </JellyPressable> : null}
+                  </View>
                 </View>
               ) : null}
 
@@ -261,6 +293,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   catalogRetryBtn: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 14,
@@ -271,6 +306,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  catalogActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.65)',
