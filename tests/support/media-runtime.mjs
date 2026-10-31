@@ -9,6 +9,8 @@ import * as config from '../../src/algorithmConfig.mjs';
 import * as sampling from '../../src/sampling.mjs';
 import * as utils from '../../src/asyncUtils.mjs';
 import * as pages from '../../src/mediaPage.mjs';
+import { createOfflineRegionLookup } from '../../src/offlineRegions.mjs';
+const getOfflinePlaceName = createOfflineRegionLookup(JSON.parse(readFileSync(new URL('../../src/data/china-regions.json', import.meta.url), 'utf8')));
 import { createTrashDeletion } from '../../src/trashDeletion.mjs';
 import { createCandidatePager } from '../../src/candidatePager.mjs';
 import { createDayPager } from '../../src/dayPager.mjs';
@@ -56,7 +58,7 @@ export function runtime(assets,store=database(),{nativeBursts={},beforeQuery,nat
  './reviewStore':{reviewStore:store},'./reviewStore.js':{reviewStore:store},'./reviewStore.mjs':{RecentIds},'./browseSession.mjs':browse,
  './candidatePager.mjs':{createCandidatePager},'./dayPager.mjs':{createDayPager},
  './resourceScheduler.mjs':{createResourceScheduler},'./mediaPage.mjs':pages,'./flightRecorder':{flightEvent:(...e)=>events.push(e)},
- './nativePhotoPreview':null,
+ './nativePhotoPreview':null, './placeNames':{getOfflinePlaceName},
 
  };
  const native={getBurstIdentifiers:async ids=>Object.fromEntries(ids.map(id=>[id,Object.entries(nativeBursts).find(([,v])=>v.some(a=>a.id===id))?.[0]||null])),

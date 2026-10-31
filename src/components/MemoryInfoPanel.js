@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, formatBytes } from '../theme';
 import { getAssetSizeBytes, getPlaceName, isVideoAsset, loadExif, loadItemBasics, isItemFavorite } from '../media';
 import { GlassPanel } from './Glass';
-import { formatGpsCoordinate } from '../mediaPage.mjs';
 
 import { useI18n } from '../i18n';
 
@@ -43,9 +42,7 @@ function MemoryInfoPanel({ item, groupIndex = 0, groupCount = 1, top }) {
         name = await getPlaceName(item);
       } catch {}
       if (!cancelled) {
-        const coordinates = formatGpsCoordinate(item?.location);
-        setLocationInfo({ id: item?.id, name: item?.placeName || name || coordinates,
-          shortName: item?.placeShortName || name || coordinates });
+        setLocationInfo({ id: item?.id, name, shortName: name });
       }
     })();
     return () => { cancelled = true; };
@@ -65,9 +62,9 @@ function MemoryInfoPanel({ item, groupIndex = 0, groupCount = 1, top }) {
 
   if (!item) return null;
   // A recycled panel must not show the previous asset's location, even for
-  // the render before its effect runs. GPS-only photos stay useful offline.
+  // the render before its effect runs. Unknown locations are simply omitted.
   const currentLocation = locationInfo?.id === item.id ? locationInfo : null;
-  const place = item.placeName || currentLocation?.name || formatGpsCoordinate(item.location);
+  const place = item.placeName || currentLocation?.name || '';
   const placeShort = item.placeShortName || currentLocation?.shortName || place;
   const camera = [exifValue(exif, 'Make'), exifValue(exif, 'Model')].filter((value, index, values) => value && values.indexOf(value) === index).join(' ');
   const dimensions = item.width && item.height ? `${item.width} × ${item.height}` : '';

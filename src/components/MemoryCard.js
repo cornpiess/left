@@ -40,7 +40,7 @@ import {
 } from '../media';
 import PhotoKitPreview from './PhotoKitPreview';
 import { supportsNativePhotoPreview } from '../nativePhotoPreview';
-import { getRenderableImageUri, formatGpsCoordinate } from '../mediaPage.mjs';
+import { getRenderableImageUri } from '../mediaPage.mjs';
 import { GlassPanel } from './Glass';
 import AmbientBackdrop from './AmbientBackdrop';
 import MaoQiuIcon from './MaoQiuIcon';
@@ -1600,9 +1600,7 @@ function MemoryCard({
       setFav(isItemFavorite(item));
       const name = await getPlaceName(item);
       if (!cancelled) {
-        // Place labels are never populated since geocoding was removed; raw
-        // GPS coordinates keep the location row alive with zero telemetry.
-        const display = name || formatGpsCoordinate(item.location);
+        const display = name;
         setPlace(display);
         setPlaceShort(display);
       }

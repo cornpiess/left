@@ -22,8 +22,8 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
 
   useEffect(() => subscribeIapProducts(setCatalog), []);
   useEffect(() => {
-    if (visible) void refreshIapCatalog();
-  }, [visible]);
+    if (visible && reason === 'menu') void refreshIapCatalog();
+  }, [visible, reason]);
 
   const membership = getMembershipState();
   const productsMap = catalog.products;
@@ -132,11 +132,11 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
               </View>
               <Text style={styles.freePolicy}>{t('paywall.freePolicy', { limit: DAILY_FREE_LIMIT })}</Text>
 
-              {catalog.status === 'error' ? (
+              {catalog.status === 'error' || catalog.status === 'idle' ? (
                 <View style={styles.catalogErrorRow}>
-                  <Text style={styles.catalogErrorText}>{t('paywall.catalogUnavailable')}</Text>
+                  <Text style={styles.catalogErrorText}>{t(catalog.status === 'idle' ? 'paywall.loadPricesHint' : 'paywall.catalogUnavailable')}</Text>
                   <JellyPressable style={styles.catalogRetryBtn} onPress={() => void refreshIapCatalog()}>
-                    <Text style={styles.catalogRetryText}>{t('paywall.retryCatalog')}</Text>
+                    <Text style={styles.catalogRetryText}>{t(catalog.status === 'idle' ? 'paywall.loadPrices' : 'paywall.retryCatalog')}</Text>
                   </JellyPressable>
                 </View>
               ) : null}

@@ -3,6 +3,7 @@ import * as MediaLibrary from 'expo-media-library/legacy';
 import { Asset } from 'expo-media-library/next';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Network from 'expo-network';
+import { getOfflinePlaceName } from './placeNames';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assignBursts, buildBurstUnits } from './burst';
 import { getAlgorithmConfig } from './algorithmConfig.mjs';
@@ -1734,10 +1735,13 @@ export async function loadExif(item) {
   return item.exif;
 }
 
-/** Return an already-known local place label without sending photo GPS data off-device. */
+/** Province/city from bundled boundaries; no online geocoding or GPS disclosure. */
 export async function getPlaceName(item) {
   if (!item) return '';
-  return item.placeShortName || item.placeName || '';
+  const name = getOfflinePlaceName(item.location);
+  item.placeName = name;
+  item.placeShortName = name;
+  return name;
 }
 
 export function releaseUnviewedBurstFrames(items, activeId) {

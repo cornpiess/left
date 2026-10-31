@@ -521,7 +521,13 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={() => { if (!deletingRef.current) onClose?.(); }} statusBarTranslucent>
-      <Animated.View style={[styles.root, { transform: [{ translateY: dismissY }] }]}>
+      <Animated.View
+        style={[styles.root, { transform: [{ translateY: dismissY }] }]}
+        onLayout={({ nativeEvent: { layout } }) => {
+          setPreviewViewport(previous => previous.width === layout.width && previous.height === layout.height
+            ? previous : { width: layout.width, height: layout.height });
+        }}
+      >
         <View style={[styles.topBar, { paddingTop: insets.top + 8, zIndex: 50 }]} {...closePanResponder.panHandlers}>
           <GlassPanel style={styles.topBarInner} radius={24} intensity={56}>
             <JellyPressable
@@ -545,13 +551,12 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
         <View
           style={{ flex: 1 }}
           pointerEvents={deleting ? 'none' : 'auto'}
-          onLayout={({ nativeEvent: { layout } }) => {
-            setPreviewViewport(previous => previous.width === layout.width && previous.height === layout.height
-              ? previous : { width: layout.width, height: layout.height });
-          }}
         >
-          {previewIndex === null ? renderGrid() : renderPreview()}
+          {previewIndex === null ? renderGrid() : null}
         </View>
+        {/* Full-screen sibling of the header/content layout: chrome overlays
+            the preview without moving its horizontal or vertical centre. */}
+        {previewIndex !== null ? renderPreview() : null}
         {previewIndex === null && items.length > 0 ? (
           <View style={[styles.trashActionWrap, { bottom: insets.bottom + 16 }]} pointerEvents="box-none">
             {deleteNotice ? <Text style={styles.emptyHint} accessibilityLiveRegion="polite">{t('trash.emptyFailed')}</Text> : null}

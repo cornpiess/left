@@ -343,7 +343,7 @@ test('a cancelled pinch does not swallow the next one-finger burst tap', () => {
   assert.equal(turns, 1);
 });
 
-test('trash preview sizes and centres every media page in its measured content viewport', async () => {
+test('trash preview is a full-screen sibling of the header and centres every media page in the screen', async () => {
   const driver = nativeDriver();
   let dimensions = { width: 393, height: 852 };
   const items = ['photo', 'video'].map((mediaType, index) => ({ id: `asset-${index}`, mediaType, displayUri: `ph://asset-${index}` }));
@@ -353,26 +353,31 @@ test('trash preview sizes and centres every media page in its measured content v
     '../nativePhotoPreview': { supportsNativePhotoPreview: true },
   }, { effects: true });
   let tree = flatten(c.render());
-  tree.find(n => n.props.onLayout).props.onLayout({ nativeEvent: { layout: { width: 393, height: 724 } } });
+  tree.find(n => n.props.onLayout).props.onLayout({ nativeEvent: { layout: { width: 393, height: 852 } } });
   c.flushEffects();
   await tick();
   tree = flatten(c.render());
   const grid = tree.find(n => n.props.numColumns === 3);
   flatten(grid.props.renderItem({ item: items[0], index: 0 })).find(n => n.props.onPress).props.onPress();
   let preview = flatten(c.render()).find(n => n.props.horizontal);
+  const root = flatten(c.render()).find(n => n.props.onLayout);
+  const fullScreen = root.children.find(n => n?.props?.style?.[0]?.zIndex === 30);
+  assert.ok(fullScreen, 'preview belongs to the modal root, never the content below the header');
+  assert.equal(fullScreen.props.style[0].top, 0);
+  assert.equal(fullScreen.props.style[0].bottom, 0);
   for (const [index, item] of items.entries()) {
     const slide = preview.props.renderItem({ item, index });
-    assert.equal(slide.props.style.at(-1).height, 724);
+    assert.equal(slide.props.style.at(-1).height, 852);
     assert.equal(slide.props.style[0].justifyContent, 'center');
   }
   dimensions = { width: 852, height: 393 };
   tree = flatten(c.render());
-  tree.find(n => n.props.onLayout).props.onLayout({ nativeEvent: { layout: { width: 852, height: 320 } } });
+  tree.find(n => n.props.onLayout).props.onLayout({ nativeEvent: { layout: { width: 852, height: 393 } } });
   preview = flatten(c.render()).find(n => n.props.horizontal);
   const layout = preview.props.getItemLayout(null, 1);
   assert.equal(layout.length, 852);
   assert.equal(layout.offset, 852);
-  assert.equal(preview.props.renderItem({ item: items[0], index: 0 }).props.style.at(-1).height, 320);
+  assert.equal(preview.props.renderItem({ item: items[0], index: 0 }).props.style.at(-1).height, 393);
   c.unmount();
 });
 

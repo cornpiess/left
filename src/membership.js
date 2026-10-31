@@ -76,7 +76,10 @@ let membershipState = {
 };
 
 let loaded = false;
+let membershipLoadPromise = null;
 let iapConnected = false;
+let iapSetupPromise = null;
+let iapProductsPromise = null;
 let purchaseUpdateSubscription = null;
 let purchaseErrorSubscription = null;
 let pendingPurchase = null;
@@ -151,7 +154,16 @@ async function initConnectionWithRetry(RNIap) {
   return false;
 }
 
-export async function fetchIapProducts() {
+export function fetchIapProducts() {
+  if (iapProductsPromise) return iapProductsPromise;
+  const request = performFetchIapProducts();
+  iapProductsPromise = request;
+  const clear = () => { if (iapProductsPromise === request) iapProductsPromise = null; };
+  request.then(clear, clear);
+  return request;
+}
+
+async function performFetchIapProducts() {
   const RNIap = getRNIap();
   if (!RNIap || !iapConnected) {
     iapCatalogStatus = 'error';
@@ -217,15 +229,24 @@ export function subscribeIapProducts(listener) {
 }
 
 export async function refreshIapCatalog() {
-  if (!iapConnected) {
-    await setupIap();
-    return getIapCatalogState();
-  }
-  await fetchIapProducts();
+  await setupIap();
+  if (iapConnected) await fetchIapProducts();
   return getIapCatalogState();
 }
 
-export async function setupIap() {
+// Only explicit store actions (Pro, load prices, buy, restore) enter this path.
+// Concurrent actions share a connection, listeners and initial catalog read.
+export function setupIap() {
+  if (iapSetupPromise) return iapSetupPromise;
+  if (iapConnected) return Promise.resolve();
+  const request = initMembership().then(() => performSetupIap());
+  iapSetupPromise = request;
+  const clear = () => { if (iapSetupPromise === request) iapSetupPromise = null; };
+  request.then(clear, clear);
+  return request;
+}
+
+async function performSetupIap() {
   const RNIap = getRNIap();
   if (!RNIap) {
     iapConnected = false;
@@ -271,9 +292,7 @@ export async function setupIap() {
         });
       }
 
-      await fetchIapProducts();
-
-      // Automatically sync and verify StoreKit active subscriptions on launch.
+      // Sync after an explicitly requested StoreKit connection, never at launch.
       // If the yearly subscription has expired/canceled, return to the free edition.
       void syncIapSubscriptionStatus();
     } else {
@@ -309,7 +328,16 @@ export async function syncIapSubscriptionStatus() {
   }
 }
 
-export async function initMembership() {
+export function initMembership() {
+  if (membershipLoadPromise) return membershipLoadPromise;
+  const request = loadLocalMembership();
+  membershipLoadPromise = request;
+  const clear = () => { if (membershipLoadPromise === request) membershipLoadPromise = null; };
+  request.then(clear, clear);
+  return request;
+}
+
+async function loadLocalMembership() {
   if (loaded) return membershipState;
   const today = getTodayString();
   if (MEMBERSHIP_FILE) {
@@ -333,8 +361,8 @@ export async function initMembership() {
   if (Platform.OS === 'ios') membershipState.usedToday = await reviewStore.dailyUsage(today);
   loaded = true;
 
-  // Initialize StoreKit connection in background
-  void setupIap();
+  // Startup is local-only: quota and cached entitlement load without requiring
+  // network access. StoreKit is refreshed when the user opens/accesses Pro.
 
   notify();
   return membershipState;
@@ -402,7 +430,7 @@ export async function buyIapProduct(planTypeKey) {
   }
 
   try {
-    const products = await fetchIapProducts();
+    const products = iapProductsMap[plan.sku] ? iapProductsMap : await fetchIapProducts();
     if (!products[plan.sku]) {
       return {
         success: false,

@@ -8,14 +8,17 @@ const i18n = { useI18n: () => ({ t: key => key, formatLocalizedDate: () => 'toda
 const texts = tree => flatten(tree).flatMap(node => node.children.filter(child => typeof child === 'string'));
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-test('GPS-only photos show coordinates in the upper-left panel, including zero coordinates', () => {
-  const props = { item: { id: 'a', location: { latitude: 0, longitude: 0 } }, top: 62 };
+test('the upper-left panel shows province/city names and never raw GPS coordinates', () => {
+  const props = { item: { id: 'a', placeName: '浙江省 · 舟山市', placeShortName: '浙江省 · 舟山市', location: { latitude: 30.244, longitude: 122.205 } }, top: 62 };
   const c = renderComponent('components/MemoryInfoPanel.js', props, {
     '../i18n': i18n, '../mediaPage.mjs': mediaPage,
   });
   const tree = c.render();
   assert.equal(tree.props.style.at(-1).top, 62);
-  assert.ok(texts(tree).includes('0.0000° N, 0.0000° E'));
+  assert.ok(texts(tree).includes('浙江省 · 舟山市'));
+  assert.ok(texts(tree).every(text => !text.includes('°')));
+  props.item = { id: 'unknown', location: { latitude: 0, longitude: 0 } };
+  assert.ok(texts(c.render()).every(text => !text.includes('°') && !text.includes('浙江省')));
 });
 
 test('location hydration cannot leak an old location onto the next photo', async () => {
