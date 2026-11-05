@@ -1,7 +1,7 @@
 // Only public merchandising data lives here. StoreKit remains the price and
 // entitlement authority. No network request runs until the paywall loads prices.
 export const PROMOTIONS_URL = 'https://raw.githubusercontent.com/cornpiess/left/main/config/promotions.json';
-export const PROMOTIONS_TIMEOUT_MS = 4000;
+export const PROMOTIONS_TIMEOUT_MS = 15000;
 export const PROMOTIONS_MAX_AGE_MS = 5 * 60 * 1000;
 
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
