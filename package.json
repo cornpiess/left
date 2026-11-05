@@ -34,14 +34,15 @@
     "react-native-svg": "15.15.4"
   },
   "scripts": {
-    "pretest": "node scripts/check-immutable-bindings.mjs",
+    "pretest": "node scripts/check-immutable-bindings.mjs && node scripts/validate-promotions.mjs",
     "test": "node --test tests/*.test.mjs",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "sync:check": "node scripts/sync-check.mjs",
-    "validate": "npm test && npx expo-doctor && npx expo export --platform ios"
+    "validate": "npm test && npx expo-doctor && npx expo export --platform ios",
+    "promotions:check": "node scripts/validate-promotions.mjs"
   },
   "private": true,
   "devDependencies": {

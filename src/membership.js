@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import promoHashes from './promoHashes.json';
+import { fetchPromotionConfig } from './promotions.mjs';
 import {
   DAILY_FREE_LIMIT,
   IAP_REQUEST_TIMEOUT_MS,
@@ -111,6 +112,8 @@ async function persist() {
 let iapProductsMap = {};
 let iapCatalogStatus = 'idle';
 let iapCatalogError = null;
+let iapPromotionContext = null;
+let iapCatalogRevision = 0;
 
 function notifyProducts() {
   const snapshot = getIapCatalogState();
@@ -164,6 +167,8 @@ export function fetchIapProducts() {
 }
 
 async function performFetchIapProducts() {
+  const revision = ++iapCatalogRevision;
+  iapPromotionContext = null;
   const RNIap = getRNIap();
   if (!RNIap || !iapConnected) {
     iapCatalogStatus = 'error';
@@ -174,6 +179,16 @@ async function performFetchIapProducts() {
   iapCatalogStatus = 'loading';
   iapCatalogError = null;
   notifyProducts();
+
+  // Merchandising must never delay product availability or block a purchase.
+  // Capture a fresh storefront with each catalog; never infer it from language,
+  // device region, currency alone, or a customer's past purchase history.
+  const promotionRequest = Platform.OS === 'ios' && typeof RNIap.getStorefront === 'function'
+    ? Promise.all([
+      fetchPromotionConfig(),
+      withTimeout(() => RNIap.getStorefront(), 4000),
+    ]).then(([data, storefront]) => data && typeof storefront === 'string' ? { ...data, storefront } : null).catch(() => null)
+    : Promise.resolve(null);
 
   // StoreKit catalog reads are flaky in sandbox/review environments; retry with
   // backoff and a hard timeout so the paywall never strands on a single hang.
@@ -202,7 +217,7 @@ async function performFetchIapProducts() {
   if (Array.isArray(products)) {
     iapProductsMap = indexIapProducts(products);
   }
-  iapCatalogStatus = resolveCatalogStatus(iapProductsMap);
+  iapCatalogStatus = Array.isArray(products) ? resolveCatalogStatus(iapProductsMap) : 'error';
   if (iapCatalogStatus === 'error') {
     iapCatalogError = lastError?.message || 'One or more App Store products are unavailable';
   } else if (iapCatalogStatus === 'partial') {
@@ -211,6 +226,14 @@ async function performFetchIapProducts() {
     iapCatalogError = null;
   }
   notifyProducts();
+  // A failed catalog read cannot give cached products a fresh promotion.
+  if (Array.isArray(products)) {
+    void promotionRequest.then(context => {
+      if (revision !== iapCatalogRevision) return;
+      iapPromotionContext = context;
+      notifyProducts();
+    });
+  }
   return iapProductsMap;
 }
 
@@ -219,7 +242,7 @@ export function getIapProductsMap() {
 }
 
 export function getIapCatalogState() {
-  return { products: { ...iapProductsMap }, status: iapCatalogStatus, error: iapCatalogError };
+  return { products: { ...iapProductsMap }, status: iapCatalogStatus, error: iapCatalogError, promotionContext: iapPromotionContext };
 }
 
 export function subscribeIapProducts(listener) {

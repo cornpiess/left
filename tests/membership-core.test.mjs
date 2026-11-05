@@ -58,11 +58,11 @@ test('StoreKit catalog fetches use a bounded timeout and automatic retries', () 
   }
 });
 
-test('paywall price text falls back to configured plan prices when products are unavailable', async () => {
+test('unavailable prices do not invent Chinese amounts for an unknown storefront', async () => {
   const { readFile } = await import('node:fs/promises');
   const paywall = await readFile(new URL('../src/components/PaywallModal.js', import.meta.url), 'utf8');
 
-  assert.match(paywall, /PRICING_PLANS\.YEARLY\.title/);
-  assert.match(paywall, /PRICING_PLANS\.LIFETIME\.title/);
-  assert.doesNotMatch(paywall, /getProductDisplayPrice\([^)]*t\('common\.loading'\)/);
+  assert.doesNotMatch(paywall, /PRICING_PLANS\.(?:YEARLY|LIFETIME)\.title/);
+  assert.match(paywall, /getProductDisplayPrice\(yearlyProduct, t\('paywall\.pricePending'\)\)/);
+  assert.match(paywall, /getProductDisplayPrice\(lifetimeProduct, t\('paywall\.pricePending'\)\)/);
 });

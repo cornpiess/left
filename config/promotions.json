@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "lifetime": {
+    "CHN": {
+      "currency": "CNY",
+      "regularPrice": 98,
+      "salePrice": 78
+    }
+  }
+}

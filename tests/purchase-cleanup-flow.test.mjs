@@ -27,8 +27,8 @@ test('failed durable selection rebounds without losing the actual photo',async()
 
 test('one purchase surface guards rapid purchase/restore taps and cancellation preserves position',async()=>{
  let resolve,buys=0,restores=0,closed=0;
- const membership={getMembershipState:()=>({isPro:false}),getIapCatalogState:()=>({products:{yearly:{},lifetime:{}},status:'ready'}),IAP_SKUS:{YEARLY:'yearly',LIFETIME:'lifetime'},PRICING_PLANS:{YEARLY:{title:'yearly'},LIFETIME:{title:'lifetime'}},buyIapProduct:()=>{buys++;return new Promise(r=>resolve=r);},restoreIapPurchases:()=>{restores++;return {};}};
- const c=renderComponent('components/PaywallModal.js',{visible:true,reason:'quota',onClose:()=>closed++},{'../membership':membership,'../membershipCore.mjs':{getProductDisplayPrice:(_,fallback)=>fallback}});
+ const membership={getMembershipState:()=>({isPro:false}),getIapCatalogState:()=>({products:{yearly:{displayPrice:'yearly'},lifetime:{displayPrice:'lifetime'}},status:'ready'}),IAP_SKUS:{YEARLY:'yearly',LIFETIME:'lifetime'},buyIapProduct:()=>{buys++;return new Promise(r=>resolve=r);},restoreIapPurchases:()=>{restores++;return {};}};
+ const c=renderComponent('components/PaywallModal.js',{visible:true,reason:'quota',onClose:()=>closed++},{'../membership':membership,'../membershipCore.mjs':{getProductDisplayPrice:(product,fallback)=>product?.displayPrice||fallback}});
  const nodes=flatten(c.render());
  const buy=nodes.find(n=>n.props.onPress&&n.props.disabled!==undefined&&flatten(n).some(child=>child.children.includes('yearly')));
  const restore=nodes.find(n=>n.props.onPress&&n.props.disabled!==undefined&&flatten(n).some(child=>child.children.includes('paywall.restoreBtn')));
