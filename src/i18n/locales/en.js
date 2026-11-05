@@ -142,6 +142,13 @@ export default {
     toastFailed: "Couldn't open the App Store. Please try again later.",
   },
   paywall: {
+    planYearly: "Annual plan",
+    planLifetime: "Lifetime access",
+    planUpgrade: "Upgrade to lifetime",
+    saleLimited: "Limited-time offer",
+    saleSavings: "Save {amount}",
+    saleOriginal: "Regular price {price}",
+    pricePending: "Price unavailable",
     limitTitle: "You’ve selected {limit} photos today",
     modalTitle: "Keep cleaning your library with ease",
     modalSub: "Go PRO for unlimited cleanup.",

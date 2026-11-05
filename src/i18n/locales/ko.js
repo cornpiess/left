@@ -142,6 +142,13 @@ export default {
     toastFailed: 'App Store를 열 수 없습니다. 나중에 다시 시도해 주세요.',
   },
   paywall: {
+    planYearly: "연간 구독",
+    planLifetime: "평생 이용",
+    planUpgrade: "평생 이용으로 업그레이드",
+    saleLimited: "기간 한정 할인",
+    saleSavings: "{amount} 할인",
+    saleOriginal: "정상가 {price}",
+    pricePending: "가격을 불러와 주세요",
     limitTitle: "오늘 삭제 후보 {limit}장을 골랐어요",
     modalTitle: "앨범 전체를 가볍게 정리하세요",
     modalSub: "PRO로 무제한 정리하세요.",

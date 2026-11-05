@@ -142,6 +142,13 @@ export default {
     toastFailed: 'No se pudo abrir el App Store. Inténtalo de nuevo más tarde.',
   },
   paywall: {
+    planYearly: "Plan anual",
+    planLifetime: "Acceso de por vida",
+    planUpgrade: "Mejorar a acceso de por vida",
+    saleLimited: "Oferta por tiempo limitado",
+    saleSavings: "Ahorra {amount}",
+    saleOriginal: "Precio habitual {price}",
+    pricePending: "Precio no disponible",
     limitTitle: "Hoy has seleccionado {limit} fotos",
     modalTitle: "Sigue limpiando tu fototeca con facilidad",
     modalSub: "Activa PRO para limpiar sin límites.",

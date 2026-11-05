@@ -142,6 +142,13 @@ export default {
     toastFailed: '无法打开 App Store，请稍后重试',
   },
   paywall: {
+    planYearly: "包年订阅",
+    planLifetime: "永久解锁",
+    planUpgrade: "升级为永久解锁",
+    saleLimited: "限时优惠",
+    saleSavings: "立省 {amount}",
+    saleOriginal: "常规价 {price}",
+    pricePending: "价格待加载",
     limitTitle: "今天已选好 {limit} 张待删照片",
     modalTitle: "继续轻松清理整个相册",
     modalSub: "开通 PRO，解锁无限清理。",

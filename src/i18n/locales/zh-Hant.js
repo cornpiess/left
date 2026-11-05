@@ -142,6 +142,13 @@ export default {
     toastFailed: '無法開啟 App Store，請稍後再試',
   },
   paywall: {
+    planYearly: "年費訂閱",
+    planLifetime: "永久解鎖",
+    planUpgrade: "升級為永久解鎖",
+    saleLimited: "限時優惠",
+    saleSavings: "現省 {amount}",
+    saleOriginal: "一般售價 {price}",
+    pricePending: "尚未載入價格",
     limitTitle: "今天已選好 {limit} 張待刪照片",
     modalTitle: "繼續輕鬆清理整個相簿",
     modalSub: "開通 PRO，解鎖無限清理。",

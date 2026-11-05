@@ -1,5 +1,6 @@
 import * as gestureContract from '../../src/gestureContract.mjs';
 import * as mediaWindow from '../../src/mediaWindow.mjs';
+import * as promotions from '../../src/promotions.mjs';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
@@ -24,6 +25,7 @@ export function renderComponent(file, props={}, overrides={}, options={}) {
   '../experience':{experience:{}},
   '../nativePhotoPreview':{supportsNativePhotoPreview:false},
   '../mediaWindow.mjs':mediaWindow,
+  '../promotions.mjs':promotions,
   '../gestureContract.mjs':gestureContract,
   '../media':new Proxy({isVideoAsset:item=>item?.mediaType==='video',isItemFavorite:()=>false},{get:(o,k)=>k in o?o[k]:universal}),
   ...overrides,
@@ -33,7 +35,7 @@ export function renderComponent(file, props={}, overrides={}, options={}) {
  if(file==='components/MemoryCard.js')modules['../useBurstMotion'] ??= loadBurstMotionRuntime(modules['react-native'],react,modules['../motion']);
  const source=readFileSync(new URL('../../src/'+file,import.meta.url),'utf8');
  const code=babel.transformSync(source,{configFile:false,babelrc:false,plugins:[require.resolve('@babel/plugin-transform-react-jsx'),require.resolve('@babel/plugin-transform-modules-commonjs')]}).code;
- const exports={};vm.runInNewContext(code,{React:react,exports,require:id=>modules[id]||new Proxy({__esModule:true},{get:(o,k)=>k in o?o[k]:universal}),console,Set,Map,Math,Date,Promise,setTimeout,clearTimeout,__DEV__:false});
+ const exports={};vm.runInNewContext(code,{React:react,exports,require:id=>modules[id]||new Proxy({__esModule:true},{get:(o,k)=>k in o?o[k]:universal}),console,Set,Map,Math,Date:options.clock?.Date||Date,Promise,setTimeout:options.clock?.setTimeout||setTimeout,clearTimeout:options.clock?.clearTimeout||clearTimeout,__DEV__:false});
  return {slots,render:()=>{cursor=0;memoCursor=0;return exports[options.exportName||'default'](props);},flushEffects:()=>{while(pendingEffects.length)pendingEffects.shift()();},unmount:()=>{effects.forEach(record=>record.cleanup?.());effects.clear();}};
 }
 export function flatten(tree) {

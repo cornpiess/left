@@ -5,18 +5,20 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassPanel, JellyPressable } from './Glass';
-import { buyIapProduct, getIapCatalogState, getMembershipState, DAILY_FREE_LIMIT, IAP_SKUS, PRICING_PLANS, refreshIapCatalog, restoreIapPurchases, subscribeIapProducts } from '../membership';
+import { buyIapProduct, getIapCatalogState, getMembershipState, DAILY_FREE_LIMIT, IAP_SKUS, refreshIapCatalog, restoreIapPurchases, subscribeIapProducts } from '../membership';
 import { getProductDisplayPrice } from '../membershipCore.mjs';
+import { formatPromotionMoney, nextPromotionBoundary, resolveLifetimePromotion } from '../promotions.mjs';
 import { useI18n } from '../i18n';
 import { openLegalPage } from '../legalNavigation';
 import { flightEvent } from '../flightRecorder';
 
 export default function PaywallModal({ visible, reason = 'menu', onClose, onToast }) {
   const insets = useSafeAreaInsets();
-  const { t } = useI18n();
+  const { t, currentLocale } = useI18n();
 
   const [catalog, setCatalog] = useState(getIapCatalogState);
   const [pendingAction, setPendingAction] = useState(null);
+  const [promotionClock, setPromotionClock] = useState(Date.now);
   const actionRef = useRef(false);
   const settingsReturnRef = useRef(false);
   const requestClose = () => { if (!actionRef.current) onClose?.(); };
@@ -25,6 +27,16 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
   useEffect(() => {
     if (visible && reason === 'menu') void refreshIapCatalog();
   }, [visible, reason]);
+
+  useEffect(() => {
+    if (!visible || !catalog.promotionContext) return undefined;
+    const { config, receivedAt } = catalog.promotionContext;
+    const boundary = nextPromotionBoundary(config, receivedAt, Date.now());
+    if (boundary === null) return undefined;
+    // Re-evaluate even if the paywall stays open across an end date or expiry.
+    const timer = setTimeout(() => setPromotionClock(Date.now()), Math.min(boundary - Date.now() + 1, 2147483647));
+    return () => clearTimeout(timer);
+  }, [visible, catalog.promotionContext, promotionClock]);
 
   useEffect(() => {
     if (!visible) { settingsReturnRef.current = false; return undefined; }
@@ -56,11 +68,43 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
   const yearlyProduct = productsMap[IAP_SKUS.YEARLY];
   const lifetimeProduct = productsMap[IAP_SKUS.LIFETIME];
 
-  // When StoreKit has not returned a product yet, show the configured ¥ price as a
-  // complete-looking fallback instead of "Loading..." (App Completeness).
-  const yearlyPriceText = getProductDisplayPrice(yearlyProduct, PRICING_PLANS.YEARLY.title);
-  const lifetimePriceText = getProductDisplayPrice(lifetimeProduct, PRICING_PLANS.LIFETIME.title);
+  // A Chinese fallback amount is misleading for other storefronts. No numeric
+  // price or promotion is shown until StoreKit supplies that product's price.
+  const yearlyPriceText = getProductDisplayPrice(yearlyProduct, t('paywall.pricePending'));
+  const lifetimePriceText = getProductDisplayPrice(lifetimeProduct, t('paywall.pricePending'));
   const usingFallbackPrice = !yearlyProduct || !lifetimeProduct;
+  const lifetimePromotion = visible && ['ready', 'partial'].includes(catalog.status)
+    ? resolveLifetimePromotion({ ...catalog.promotionContext, product: lifetimeProduct, now: Date.now() }) : null;
+
+  // All purchase paths share this layout, including a subscriber's upgrade.
+  // Labels and badges wrap independently; no fixed card heights or text clips.
+  const renderPlanContent = (plan, upgrading = false) => {
+    const yearly = plan === 'yearly';
+    const promotion = yearly ? null : lifetimePromotion;
+    const color = yearly ? '#111827' : '#FFFFFF';
+    const label = t(upgrading ? 'paywall.planUpgrade' : yearly ? 'paywall.planYearly' : 'paywall.planLifetime');
+    const price = yearly ? yearlyPriceText : lifetimePriceText;
+    return <View style={styles.planContent}>
+      <View style={styles.planLabelRow}>
+        <View style={styles.planLabelGroup}>
+          {pendingAction === plan ? <ActivityIndicator color={color} /> : <Ionicons name={yearly ? 'sparkles' : 'infinite'} size={18} color={color} />}
+          <Text style={[styles.planLabel, { color }]}>{label}</Text>
+        </View>
+        {promotion ? <View style={styles.saleBadge}>
+          <Text style={styles.saleBadgeText}>{t('paywall.saleLimited')}</Text>
+        </View> : null}
+      </View>
+      <View style={styles.planPriceRow}>
+        <Text style={[styles.planPrice, { color }]} adjustsFontSizeToFit minimumFontScale={0.65} numberOfLines={1}>{price}</Text>
+        {promotion ? <Text style={styles.originalPrice} accessibilityLabel={t('paywall.saleOriginal', { price: formatPromotionMoney(promotion.regularPrice, promotion.currency, currentLocale) })}>
+          {formatPromotionMoney(promotion.regularPrice, promotion.currency, currentLocale)}
+        </Text> : null}
+      </View>
+      {promotion ? <Text style={styles.saleSavings}>
+        {t('paywall.saleSavings', { amount: formatPromotionMoney(promotion.savings, promotion.currency, currentLocale) })}
+      </Text> : null}
+    </View>;
+  };
 
   const handleBuy = async (planType) => {
     if (actionRef.current) return;
@@ -140,7 +184,7 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
 
               {/* Headline */}
               <Text style={styles.paywallTitle} accessibilityRole="header">
-                {membership.isPro ? t('paywall.proTitle') || `${t('common.appName')} PRO` : t(reason === 'quota' ? 'paywall.limitTitle' : 'paywall.modalTitle', { limit: DAILY_FREE_LIMIT })}
+                {membership.isPro ? `${t('common.appName')} PRO` : t(reason === 'quota' ? 'paywall.limitTitle' : 'paywall.modalTitle', { limit: DAILY_FREE_LIMIT })}
               </Text>
               <Text style={styles.paywallSubtitle}>
                 {membership.isPro
@@ -156,7 +200,6 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
                   <Text style={styles.paywallPrivilegeText}>{t('paywall.privilege1')}</Text>
                 </View>
               </View>
-              <Text style={styles.freePolicy}>{t('paywall.freePolicy', { limit: DAILY_FREE_LIMIT })}</Text>
 
               {catalog.status === 'error' || catalog.status === 'idle' ? (
                 <View style={styles.catalogErrorRow}>
@@ -192,82 +235,46 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
 
                   {/* If user is Yearly Subscriber, allow upgrading to Lifetime Buyout */}
                   {membership.planType === 'yearly' ? (
-                    <JellyPressable disabled={!lifetimeProduct || Boolean(pendingAction)} style={[styles.paywallPlanCtaLifetime, (!lifetimeProduct || pendingAction) && { opacity: 0.55 }]} onPress={() => handleBuy('lifetime')}>
-                      <View style={styles.paywallPlanRow}>
-                        <View style={styles.paywallPlanHeader}>
-                          {pendingAction === 'lifetime' ? <ActivityIndicator color="#FFD700" /> : <Ionicons name="sparkles" size={20} color="#FFD700" />}
-                          <Text style={styles.paywallPlanTitleLifetime}>
-                            {t('paywall.upgradeToLifetime', { price: lifetimePriceText })}
-                          </Text>
-                        </View>
-                        <View style={styles.paywallPlanBadgeWrapLifetime}>
-                          <Text style={styles.paywallPlanBadgeTextLifetime}>
-                            {t('paywall.lifetimeBadge')}
-                          </Text>
-                        </View>
-                      </View>
+                    <JellyPressable containerStyle={styles.planTouchTarget} disabled={!lifetimeProduct || Boolean(pendingAction)} style={[styles.paywallPlanCtaLifetime, lifetimePromotion && styles.saleCard, (!lifetimeProduct || pendingAction) && { opacity: 0.55 }]} onPress={() => handleBuy('lifetime')}>
+                      {renderPlanContent('lifetime', true)}
                     </JellyPressable>
                   ) : null}
                 </View>
               ) : (
                 <View style={styles.paywallPlanContainer}>
                   {/* Plan 1: Yearly Subscription (Solid White Pill) */}
-                  <JellyPressable disabled={!yearlyProduct || Boolean(pendingAction)} style={[styles.paywallPlanCtaYearly, (!yearlyProduct || pendingAction) && { opacity: 0.55 }]} onPress={() => handleBuy('yearly')}>
-                    <View style={styles.paywallPlanRow}>
-                      <View style={styles.paywallPlanHeader}>
-                        {pendingAction === 'yearly' ? <ActivityIndicator color="#111827" /> : <Ionicons name="sparkles" size={20} color="#111827" />}
-                        <Text style={styles.paywallPlanTitleYearly}>
-                          {yearlyPriceText}
-                        </Text>
-                      </View>
-                      <View style={styles.paywallPlanBadgeWrapYearly}>
-                        <Text style={styles.paywallPlanBadgeTextYearly}>
-                          {t('paywall.yearlyBadge')}
-                        </Text>
-                      </View>
-                    </View>
+                  <JellyPressable containerStyle={styles.planTouchTarget} disabled={!yearlyProduct || Boolean(pendingAction)} style={[styles.paywallPlanCtaYearly, (!yearlyProduct || pendingAction) && { opacity: 0.55 }]} onPress={() => handleBuy('yearly')}>
+                    {renderPlanContent('yearly')}
                   </JellyPressable>
 
                   {/* Plan 2: Lifetime Buyout (Frosted Glass Pill) */}
-                  <JellyPressable disabled={!lifetimeProduct || Boolean(pendingAction)} style={[styles.paywallPlanCtaLifetime, (!lifetimeProduct || pendingAction) && { opacity: 0.55 }]} onPress={() => handleBuy('lifetime')}>
-                    <View style={styles.paywallPlanRow}>
-                      <View style={styles.paywallPlanHeader}>
-                        {pendingAction === 'lifetime' ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="infinite" size={20} color="#FFFFFF" />}
-                        <Text style={styles.paywallPlanTitleLifetime}>
-                          {lifetimePriceText}
-                        </Text>
-                      </View>
-                      <View style={styles.paywallPlanBadgeWrapLifetime}>
-                        <Text style={styles.paywallPlanBadgeTextLifetime}>
-                          {t('paywall.lifetimeBadge')}
-                        </Text>
-                      </View>
-                    </View>
+                  <JellyPressable containerStyle={styles.planTouchTarget} disabled={!lifetimeProduct || Boolean(pendingAction)} style={[styles.paywallPlanCtaLifetime, lifetimePromotion && styles.saleCard, (!lifetimeProduct || pendingAction) && { opacity: 0.55 }]} onPress={() => handleBuy('lifetime')}>
+                    {renderPlanContent('lifetime')}
                   </JellyPressable>
                 </View>
               )}
+
+              <Text style={styles.freePolicy}>{t('paywall.freePolicy', { limit: DAILY_FREE_LIMIT })}</Text>
 
               {/* 3.1.2: auto-renewal terms must be disclosed in the purchase UI */}
               <Text style={styles.autoRenewText}>{t('paywall.autoRenewDisclosure')}</Text>
 
               {/* Adaptive Flow Footer Actions */}
               <View style={styles.paywallActions}>
-                <JellyPressable disabled={Boolean(pendingAction)} style={[styles.paywallActionBtn, pendingAction && { opacity: 0.55 }]} onPress={handleRestore}>
+                <JellyPressable containerStyle={styles.footerTouchTarget} disabled={Boolean(pendingAction)} style={[styles.paywallActionBtn, pendingAction && { opacity: 0.55 }]} onPress={handleRestore}>
                   {pendingAction === 'restore' ? <ActivityIndicator size="small" color="#A6E1FF" /> : <Ionicons name="cart-outline" size={14} color="#A6E1FF" />}
                   <Text style={styles.paywallActionText}>{t('paywall.restoreBtn')}</Text>
                 </JellyPressable>
 
-                <Text style={styles.legalDot}>·</Text>
+                <View style={styles.legalLinksRow}>
+                  <JellyPressable containerStyle={styles.footerTouchTarget} style={styles.paywallActionBtn} onPress={() => void openLegal('privacy')}>
+                    <Text style={styles.paywallActionTextSub}>{t('menu.privacyPolicy')}</Text>
+                  </JellyPressable>
 
-                <JellyPressable style={styles.paywallActionBtn} onPress={() => void openLegal('privacy')}>
-                  <Text style={styles.paywallActionTextSub}>{t('legal.privacyTitle')}</Text>
-                </JellyPressable>
-
-                <Text style={styles.legalDot}>·</Text>
-
-                <JellyPressable style={styles.paywallActionBtn} onPress={() => void openLegal('terms')}>
-                  <Text style={styles.paywallActionTextSub}>{t('legal.termsTitle')}</Text>
-                </JellyPressable>
+                  <JellyPressable containerStyle={styles.footerTouchTarget} style={styles.paywallActionBtn} onPress={() => void openLegal('terms')}>
+                    <Text style={styles.paywallActionTextSub}>{t('legal.termsTitle')}</Text>
+                  </JellyPressable>
+                </View>
               </View>
             </GlassPanel>
           </ScrollView>
@@ -367,7 +374,7 @@ const styles = StyleSheet.create({
   },
   freePolicy: { color: '#BEB8CA', fontSize: 12, lineHeight: 18, textAlign: 'center', marginBottom: 18 },
   paywallTitle: {
-    paddingTop: 18,
+    paddingTop: 36,
     paddingHorizontal: 12,
     color: '#FFFFFF',
     fontSize: 21,
@@ -425,6 +432,8 @@ const styles = StyleSheet.create({
     color: '#10B981',
     fontSize: 15,
     fontWeight: '800',
+    flexShrink: 1,
+    textAlign: 'center',
   },
   paywallPlanCtaYearly: {
     width: '100%',
@@ -433,7 +442,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 14,
   },
   paywallPlanCtaLifetime: {
     width: '100%',
@@ -444,65 +453,28 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.35)',
     justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 14,
   },
-  paywallPlanRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  paywallPlanHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  paywallPlanTitleYearly: {
-    color: '#111827',
-    fontSize: 17.5,
-    fontWeight: '800',
-    flexShrink: 0,
-  },
-  paywallPlanBadgeWrapYearly: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: 'rgba(17, 24, 39, 0.08)',
-    flexShrink: 0,
-  },
-  paywallPlanBadgeTextYearly: {
-    color: 'rgba(17, 24, 39, 0.85)',
-    fontSize: 11.5,
-    fontWeight: '600',
-  },
-  paywallPlanTitleLifetime: {
-    color: '#FFFFFF',
-    fontSize: 17.5,
-    fontWeight: '800',
-    flexShrink: 1,
-  },
-  paywallPlanBadgeWrapLifetime: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    flexShrink: 1,
-  },
-  paywallPlanBadgeTextLifetime: {
-    color: 'rgba(255, 255, 255, 0.90)',
-    fontSize: 11.5,
-    fontWeight: '600',
-    flexShrink: 1,
-  },
+  planTouchTarget: { width: '100%' },
+  planContent: { width: '100%', gap: 7 },
+  planLabelRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  planLabelGroup: { flexDirection: 'row', alignItems: 'center', flexGrow: 1, flexBasis: 120, minWidth: 0, gap: 7 },
+  planLabel: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
+  planPriceRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 8 },
+  planPrice: { fontSize: 25, fontWeight: '800', flexShrink: 1, maxWidth: '100%', fontVariant: ['tabular-nums'] },
+  originalPrice: { color: '#C9C5CE', fontSize: 14, textDecorationLine: 'line-through', flexShrink: 1 },
+  saleCard: { backgroundColor: 'rgba(245, 185, 88, 0.10)', borderColor: '#CFA665' },
+  saleBadge: { alignSelf: 'flex-start', maxWidth: '100%', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#F6D79C' },
+  saleBadgeText: { color: '#3B2810', fontSize: 11, fontWeight: '700', flexShrink: 1 },
+  saleSavings: { color: '#F6D79C', fontSize: 12, fontWeight: '600', flexShrink: 1 },
   paywallActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingHorizontal: 8,
   },
+  legalLinksRow: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: 12 },
   autoRenewText: {
     color: 'rgba(255, 255, 255, 0.55)',
     fontSize: 11,
@@ -518,19 +490,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 8,
     paddingHorizontal: 4,
+    maxWidth: '100%',
   },
+  footerTouchTarget: { maxWidth: '100%' },
   paywallActionText: {
     color: '#A6E1FF',
     fontSize: 12.5,
     fontWeight: '600',
+    flexShrink: 1,
   },
   paywallActionTextSub: {
     color: 'rgba(255, 255, 255, 0.65)',
     fontSize: 12,
     fontWeight: '500',
-  },
-  legalDot: {
-    color: 'rgba(255, 255, 255, 0.30)',
-    fontSize: 12,
+    flexShrink: 1,
   },
 });

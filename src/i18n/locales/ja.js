@@ -142,6 +142,13 @@ export default {
     toastFailed: 'App Storeを開けませんでした。後でもう一度お試しください。',
   },
   paywall: {
+    planYearly: "年間プラン",
+    planLifetime: "永久ライセンス",
+    planUpgrade: "永久ライセンスにアップグレード",
+    saleLimited: "期間限定セール",
+    saleSavings: "{amount}お得",
+    saleOriginal: "通常価格 {price}",
+    pricePending: "価格を読み込んでください",
     limitTitle: "今日は{limit}枚を削除候補に選びました",
     modalTitle: "もっと気軽に、アルバムを整理",
     modalSub: "PROで枚数制限なく整理。",
