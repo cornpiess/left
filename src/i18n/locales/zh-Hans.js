@@ -1,4 +1,5 @@
 export default {
+  feedback: { historyFailed: "整理记录暂未保存，请稍后重试", unavailable: "暂不可用", listFailed: "暂时无法读取相册" },
   common: {
     appName: '毛球',
     maoqiu: '待删相册',
@@ -61,6 +62,7 @@ export default {
     readingInfo: '读取拍摄信息…',
   },
   dayCarousel: {
+    loadFailed: "未能加载同日照片，请重试",
     title: '回到那天',
     subtitle: '那天的 {count} 条回忆',
     loadingTitle: '正在检索同日相册...',

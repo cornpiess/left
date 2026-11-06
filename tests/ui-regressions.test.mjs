@@ -41,7 +41,7 @@ test('StoreKit actions prevent duplicate purchase and restore requests', async (
   assert.match(paywall, /disabled=\{!yearlyProduct \|\| Boolean\(pendingAction\)\}/);
   assert.match(paywall, /disabled=\{!lifetimeProduct \|\| Boolean\(pendingAction\)\}/);
   assert.match(paywall, /disabled=\{Boolean\(pendingAction\)\}/);
-  assert.match(paywall, /<ActivityIndicator/);
+  assert.match(paywall, /<BusyMark/);
 });
 
 test('completion restarts viewed history and recommendation modes are selectable', async () => {
@@ -52,7 +52,7 @@ test('completion restarts viewed history and recommendation modes are selectable
   ]);
 
   assert.match(home, /item\.kind === 'complete'/);
-  assert.match(home, /onPress=\{handleResetViewedHistory\}/);
+  assert.match(home, /onAction=\{handleResetViewedHistory\}/);
   assert.match(moreMenu, /id: 'default'/);
   assert.match(moreMenu, /id: 'storage'/);
   assert.match(media, /AsyncStorage\.setItem\(RECOMMEND_MODE_STORAGE_KEY, mode\)/);

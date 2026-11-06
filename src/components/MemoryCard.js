@@ -3,7 +3,6 @@ import { MOTION, beginMotionDrag, moveMotionDrag, exitMotion, fadeMotion, settle
 import useBurstMotion from '../useBurstMotion';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   AppState,
   Easing,
@@ -40,6 +39,7 @@ import {
   isItemFavorite,
 } from '../media';
 import PhotoKitPreview from './PhotoKitPreview';
+import Feedback from './Feedback';
 import { supportsNativePhotoPreview } from '../nativePhotoPreview';
 import { getRenderableImageUri } from '../mediaPage.mjs';
 import { GlassPanel } from './Glass';
@@ -734,7 +734,7 @@ function MemoryCard({
   const [burstBackdropUri, setBurstBackdropUri] = useState(null);
   const burstBackdropAnchorRef = useRef(null);
   const [renderedStep, setRenderedStep] = useState(-1);
-  const [showLoadingSpinner, setShowLoadingSpinner] = useState(false);
+
   const [zoomed, setZoomed] = useState(false);
   const [videoRate, setVideoRate] = useState(1);
 
@@ -761,7 +761,9 @@ function MemoryCard({
   const burstBorderColor = isBurst && groupCount > 1
     ? BURST_RAINBOW_BORDER_COLORS[(item.burstIndex ?? groupIndex) % BURST_RAINBOW_BORDER_COLORS.length]
     : null;
-  const canZoom = !isVideo;
+  const mediaReady = displayedMediaId === item?.id && (!isVideo || (videoFirstFrame && !videoFailure));
+  const mediaReadyRef = useRef(mediaReady); mediaReadyRef.current = mediaReady;
+  const canZoom = !isVideo && mediaReady;
   // Media-first chrome for bursts: the colored wireframe (front border +
   // fanned stack deck) must never appear before the photo under it can be
   // shown, otherwise a fast swipe or a return from "回到那一天" renders a
@@ -983,7 +985,8 @@ function MemoryCard({
   );
 
   const commitFav = useCallback(() => {
-    if (trashingRef.current) return;
+    if (trashingRef.current || !activeRef.current) return;
+    if (!mediaReadyRef.current) { settleMotion(translateX, 0, { reduced: reduceMotion }).start(); return; }
     trashingRef.current = true;
     // Reset only when the async toggle settles (not after visual snapback):
     // on slow PhotoKit assets the old timing re-opened the gate while the
@@ -1027,6 +1030,7 @@ function MemoryCard({
   assetIdentityRef.current = item?.id;
   const commitTrash = useCallback(async () => {
     if (trashingRef.current || !activeRef.current) return;
+    if (!mediaReadyRef.current) { settleMotion(translateX, 0, { reduced: reduceMotion }).start(); return; }
     trashingRef.current = true;
     const operationId = item?.id;
     const opVersion = ++trashOpVersionRef.current;
@@ -1089,7 +1093,7 @@ function MemoryCard({
 
   // ---- Long press: video → 2x; live photos and still photos intentionally do nothing ----
   const handleLongPress = useCallback(() => {
-    if (!activeRef.current) return;
+    if (!activeRef.current || !mediaReadyRef.current) return;
     if (isVideo) {
       setVideoRate(2);
       return;
@@ -1131,7 +1135,7 @@ function MemoryCard({
 
   const shouldCaptureHorizontal = useCallback(
     (e, g) => {
-      if (trashingRef.current) return false;
+      if (trashingRef.current || !mediaReadyRef.current) return false;
       const touches = e?.nativeEvent?.touches ? e.nativeEvent.touches.length : g.numberActiveTouches;
       if (touches >= 2) return true;
       if (zoomedRef.current) return Math.abs(g.dx) + Math.abs(g.dy) > 8;
@@ -1144,7 +1148,7 @@ function MemoryCard({
   // Establish the baseline when the second finger lands, before responder
   // ownership/movement. All media use this path, including non-zoomable video.
   const beginPinch = useCallback((e) => {
-    if (trashingRef.current) return false;
+    if (trashingRef.current || !mediaReadyRef.current) return false;
     const distance = pinchDist(e);
     if (distance <= 0) return false;
     const z = zoomStateRef.current;
@@ -1423,7 +1427,7 @@ function MemoryCard({
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         burstDirectionRef.current = direction;
         onGroupNext?.(direction);
-      } else if (isVideo) {
+      } else if (isVideo && mediaReadyRef.current) {
         handleTap();
       }
       // single photos / live photos: tap intentionally does nothing
@@ -1733,17 +1737,6 @@ function MemoryCard({
     if (!supportsNativePhotoPreview && !isVideo && stillStep === 3) reportMediaDisplayFailure(item);
   }, [isVideo, stillStep, item?.id]);
 
-  // Grace period before showing loading spinner: fast prefetched images (10-50ms)
-  // NEVER flash a spinner, matching TikTok / Douyin instant browsing.
-  useEffect(() => {
-    setShowLoadingSpinner(false);
-    if (!active) return undefined;
-    const t = setTimeout(() => {
-      setShowLoadingSpinner(true);
-    }, 350);
-    return () => clearTimeout(t);
-  }, [active, item?.id]);
-
   // ---- Gesture-driven interpolations ----
   const rotate = translateX.interpolate({
     inputRange: [-200, 0, 200],
@@ -1791,7 +1784,7 @@ function MemoryCard({
   // Keep one active player plus one muted, viewless next-card preloader. More
   // players starve iOS decoders and were the root cause of black-screen reports.
   const showVideo = isVideo && (active || keepMotion);
-  const showLiveMotion = keepLiveMotion;
+  const showLiveMotion = keepLiveMotion && mediaReady;
 
   // Card geometry: media-proportional contain fit — the card is as large as
   // possible inside the screen margins and hugs the photo/video aspect ratio
@@ -1962,7 +1955,7 @@ function MemoryCard({
                 {/* Off-screen / inactive cards show a quiet placeholder instead of decoding media */}
                 {!showPhotoSurface && !showVideo ? (
                   <View style={styles.mediaPlaceholder} pointerEvents="none">
-                    <Ionicons name="image-outline" size={42} color="rgba(255,255,255,0.16)" />
+
                   </View>
                 ) : null}
 
@@ -2093,34 +2086,8 @@ function MemoryCard({
               <Ionicons name="heart" size={64} color={colors.fav} />
             </Animated.View>
 
-            {/* loading indicator (photo & video) — inside card for exact geometric center alignment */}
-            {active && showLoadingSpinner && !videoFailure && stillStep !== 3 && ((!isVideo && displayedMediaId !== item.id) || (isVideo && item.displayUri && !videoFirstFrame)) ? (
-              <View style={styles.videoLoadingOverlay} pointerEvents="none">
-                <View style={styles.videoLoadingMark}>
-                  <ActivityIndicator size="small" color="#fff" />
-                </View>
-                {!isVideo && photoProgress !== null ? (
-                  <Text style={styles.mediaLoadingText}>
-                    {t('home.cloudLoading')}{photoProgress > 0 ? ` ${Math.round(photoProgress * 100)}%` : ''}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
-            {active && (isVideo ? videoFailure || !item.displayUri : stillStep === 3) ? (
-              <View style={[StyleSheet.absoluteFillObject, styles.mediaFailed]} pointerEvents="box-none">
-                <Ionicons name={photoFailure === 'offline' ? 'cloud-offline-outline' : 'image-outline'} size={30} color={colors.textMuted} />
-                <Text style={styles.mediaFailedText}>
-                  {t(photoFailure === 'offline' ? 'home.mediaOffline' : photoFailure === 'asset-missing' || photoFailure === 'permission' ? 'home.mediaUnavailable' : isVideo ? 'home.videoLoadFailed' : 'home.imageLoadFailed')}
-                </Text>
-                <Pressable onPress={retryMedia} accessibilityRole="button" style={styles.mediaRetryButton}>
-                  <Text style={styles.mediaRetryText}>{t('home.retryBtn')}</Text>
-                </Pressable>
-                <Text style={styles.mediaFailedText}>{t('home.mediaSkipHint')}</Text>
-              </View>
-            ) : null}
-
             {/* Pause indicator: centered glass play button (video only) */}
-            {!playing && active && !zoomed && !trashingRef.current && !dismissingRef.current ? (
+            {!playing && active && mediaReady && !zoomed && !trashingRef.current && !dismissingRef.current ? (
               <View style={styles.pauseOverlay} pointerEvents="none">
                 <View style={styles.pauseBtn}>
                   <Ionicons name="play" size={46} color="#fff" style={styles.pauseIcon} />
@@ -2196,7 +2163,7 @@ function MemoryCard({
                 {place ? <DetailLine icon="location-outline">{place}</DetailLine> : null}
                 {item.filename ? <DetailLine icon="document-outline">{item.filename}</DetailLine> : null}
                 {dimensions ? <DetailLine icon="expand-outline">{dimensions}</DetailLine> : null}
-                {infoSize === null ? <DetailLine icon="hourglass-outline">读取拍摄信息…</DetailLine> : null}
+                {infoSize === null ? <Text style={styles.mediaFailedText}>{t('home.readingInfo')}</Text> : null}
                 {infoSize > 0 ? <DetailLine icon="folder-outline">{formatBytes(infoSize)}</DetailLine> : null}
                 {cameraName ? <DetailLine icon="camera-outline">{cameraName}</DetailLine> : null}
                 {lensName ? <DetailLine icon="scan-outline">{lensName}</DetailLine> : null}
@@ -2210,6 +2177,15 @@ function MemoryCard({
       </View> : null}
 
     </View>
+      {active && !mediaReady ? <Feedback
+        identity={`${item.id}:${mediaRetry}`} variant="stage"
+        state={(isVideo ? videoFailure || !item.displayUri : stillStep === 3) ? 'error' : 'loading'}
+        title={(isVideo ? videoFailure || !item.displayUri : stillStep === 3)
+          ? t(photoFailure === 'offline' ? 'home.mediaOffline' : photoFailure === 'asset-missing' || photoFailure === 'permission' ? 'home.mediaUnavailable' : isVideo ? 'home.videoLoadFailed' : 'home.imageLoadFailed')
+          : t(photoProgress !== null && !isVideo ? 'home.cloudLoading' : 'home.loadingHint')}
+        progress={!isVideo ? photoProgress : null}
+        actionLabel={t('home.retryBtn')} onAction={retryMedia} hint={t('home.mediaSkipHint')}
+      /> : null}
     </View>
   );
 }
@@ -2413,64 +2389,8 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  mediaLoading: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  videoLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 32, // Optical center alignment considering bottom control pill & top bar
-    zIndex: 30,
-  },
-  videoLoadingMark: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(10,14,24,0.68)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.32)',
-    shadowColor: '#000',
-    shadowOpacity: 0.36,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  videoPlayIcon: {
-    marginLeft: 2, // optical centering for triangle inside circle
-  },
-  mediaPlaceholder: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mediaFailed: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 16,
-    zIndex: 32,
-  },
-  mediaFailedText: {
-    color: colors.textMuted,
-    fontSize: 13,
-    textAlign: 'center',
-    flexShrink: 1,
-  },
-  mediaLoadingText: {
-    color: '#fff', fontSize: 12, textAlign: 'center', marginTop: 10,
-    backgroundColor: 'rgba(10,14,24,0.68)', padding: 6, borderRadius: 8,
-  },
-  mediaRetryButton: {
-    minHeight: 44, minWidth: 100, paddingHorizontal: 20, paddingVertical: 12,
-    alignItems: 'center', justifyContent: 'center', borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  mediaRetryText: { color: '#fff', fontSize: 14, textAlign: 'center' },
+  mediaPlaceholder: { ...StyleSheet.absoluteFillObject, backgroundColor: '#16171D' },
+  mediaFailedText: { color: colors.textMuted, fontSize: 13, textAlign: 'center' },
   bottomScrim: {
     position: 'absolute',
     left: 0,
@@ -2541,7 +2461,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 32, // Optical center alignment matching video loading mark
   },
   pauseBtn: {
     width: 88,

@@ -1,6 +1,5 @@
 import { useCallback, useRef } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Pressable,
   StyleSheet,
@@ -11,6 +10,7 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme';
+import { BusyMark } from './Feedback';
 import { MOTION, settleMotion, useReducedMotion } from '../motion';
 
 /**
@@ -140,7 +140,7 @@ export function PrimaryButton({ label, onPress, disabled = false, loading = fals
     containerStyle={styles.primaryContainer}
     style={styles.primaryButton}
   >
-    {loading ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.primaryLabel}>{label}</Text>}
+    <View style={styles.primaryRow}><BusyMark color={colors.bg} visible={loading} /><Text style={styles.primaryLabel}>{label}</Text><View style={styles.balanceSlot} /></View>
   </JellyPressable>;
 }
 
@@ -198,6 +198,8 @@ const styles = StyleSheet.create({
   primaryContainer: { width: '100%', maxWidth: 420, alignSelf: 'center' },
   primaryButton: { minHeight: 54, borderRadius: 27, backgroundColor: colors.primary,
     paddingHorizontal: 24, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
+  primaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%' },
+  balanceSlot: { width: 24, flexShrink: 0 },
   primaryLabel: { color: colors.bg, fontSize: 17, lineHeight: 24, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
   btnWrap: {
     alignItems: 'center',

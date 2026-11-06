@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { GlassPanel, JellyPressable } from './Glass';
+import Feedback from './Feedback';
 import { useI18n } from '../i18n';
 import { colors } from '../theme';
 
@@ -15,21 +14,8 @@ function ErrorFallback({ error, onRetry }) {
   const { t } = useI18n();
   return (
     <View style={styles.container}>
-      <GlassPanel style={styles.card} radius={28} intensity={85}>
-        <View style={styles.iconWrap}>
-          <Ionicons name="warning-outline" size={40} color="#FBBF24" />
-        </View>
-        <Text style={styles.title}>{t('error.boundaryTitle')}</Text>
-        <Text style={styles.body} numberOfLines={4}>
-          {t('error.boundaryBody')}
-        </Text>
-        {__DEV__ && error?.message ? (
-          <Text style={styles.detail} numberOfLines={6}>{error.message}</Text>
-        ) : null}
-        <JellyPressable style={styles.button} onPress={onRetry}>
-          <Text style={styles.buttonText}>{t('error.boundaryRetry')}</Text>
-        </JellyPressable>
-      </GlassPanel>
+      <Feedback variant="page" state="error" title={t('error.boundaryTitle')} detail={t('error.boundaryBody')} actionLabel={t('error.boundaryRetry')} onAction={onRetry} />
+      {__DEV__ && error?.message ? <Text style={styles.detail}>{error.message}</Text> : null}
     </View>
   );
 }
@@ -71,55 +57,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  card: {
-    width: '100%',
-    maxWidth: 340,
-    padding: 24,
-    alignItems: 'center',
-    backgroundColor: 'rgba(18, 19, 24, 0.92)',
-  },
-  iconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(251, 191, 36, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  body: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 18,
-  },
   detail: {
     color: 'rgba(255,255,255,0.35)',
     fontSize: 11,
     textAlign: 'center',
     marginBottom: 18,
   },
-  button: {
-    width: '100%',
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '800',
-  },
+
 });

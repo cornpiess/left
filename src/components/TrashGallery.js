@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   FlatList,
   Modal,
@@ -22,7 +21,8 @@ import { beginMotionDrag, moveMotionDrag, exitMotion, settleMotion, useReducedMo
 import { GlassPanel, JellyPressable } from './Glass';
 import { emptyTrash, fetchTrashSummary, fetchTrashItems, getAssetSizeBytes, getDisplayUri, getUriFallback, isVideoAsset, loadExif, restoreFromTrash } from '../media';
 import { getRenderableImageUri } from '../mediaPage.mjs';
-import PhotoKitPreview from './PhotoKitPreview';
+import MediaPreview from './MediaPreview';
+import Feedback, { BusyMark } from './Feedback';
 import { supportsNativePhotoPreview } from '../nativePhotoPreview';
 import MaoQiuIcon from './MaoQiuIcon';
 import { useI18n } from '../i18n';
@@ -67,19 +67,37 @@ async function loadVideoCover(item) {
   return null;
 }
 
-function TrashVideoPreview({ uri }) {
-  const player = useVideoPlayer(uri, (instance) => {
-    // Same defensive pattern as MemoryCard: never let a player property call
-    // escape during setup.
-    try {
-      instance.loop = true;
-      instance.muted = true;
-      instance.volume = 0;
-      instance.play();
-    } catch {}
+function TrashVideoPlayer({ uri, onReady, onFailure }) {
+  const player = useVideoPlayer(uri, instance => {
+    try { instance.loop = true; instance.muted = true; instance.volume = 0; instance.play(); } catch {}
   });
+  const firstFrame = useRef(false);
+  useEffect(() => {
+    let listener;
+    const fail = () => { try { player.pause(); player.muted = true; } catch {} onFailure(); };
+    try {
+      listener = player.addListener('statusChange', ({ status }) => { if (status === 'error') fail(); });
+      if (player.status === 'error') fail();
+    } catch {}
+    const timer = setTimeout(() => { if (!firstFrame.current) fail(); }, 15000);
+    return () => { clearTimeout(timer); listener?.remove?.(); try { player.pause(); player.muted = true; } catch {} };
+  }, [player, onFailure]);
+  return <VideoView player={player} style={styles.previewVideo} contentFit="contain" nativeControls
+    onFirstFrameRender={() => { firstFrame.current = true; onReady(); }} />;
+}
 
-  return <VideoView player={player} style={styles.previewVideo} contentFit="contain" nativeControls />;
+function TrashVideoPreview({ item }) {
+  const { t } = useI18n();
+  const [state, setState] = useState('loading');
+  const [retry, setRetry] = useState(0);
+  const ready = useCallback(() => setState('ready'), []);
+  const fail = useCallback(() => setState('error'), []);
+  return <View style={StyleSheet.absoluteFill}>
+    <MediaPreview assetId={item.id} uri={photoUri(item)} purpose="trashPreview" feedback={false} style={StyleSheet.absoluteFill} />
+    {state !== 'error' && item.displayUri ? <TrashVideoPlayer key={retry} uri={item.displayUri} onReady={ready} onFailure={fail} /> : null}
+    <Feedback identity={`${item.id}:${retry}`} state={!item.displayUri ? 'error' : state} title={t(state === 'error' || !item.displayUri ? 'home.videoLoadFailed' : 'home.loadingHint')}
+      actionLabel={t('home.retryBtn')} onAction={() => { setState('loading'); setRetry(value => value + 1); }} />
+  </View>;
 }
 
 function formatDateTime(ts) {
@@ -111,6 +129,9 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
   const [previewMeta, setPreviewMeta] = useState(null);
   const [previewViewport, setPreviewViewport] = useState({ width: 0, height: 0 });
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [pageFailed, setPageFailed] = useState(false);
+  const reloadOwner = useRef(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteNotice, setDeleteNotice] = useState(false);
   const deletingRef = useRef(false);
@@ -179,6 +200,7 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
     setSizeBytes(totalBytes);
     setUnknownCount(unknown);
     setLoading(false);
+    setLoadFailed(false); setPageFailed(false);
 
     // Enhance video covers in the background without stalling grid UI.
     // Bounded concurrency (3) + one attempt per asset per session: an
@@ -203,14 +225,21 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
     Promise.all(coverWorkers).catch(() => {});
   }, []);
 
+  const reload = useCallback(() => {
+    if (reloadOwner.current) return;
+    const owner = {}; reloadOwner.current = owner;
+    setLoading(true); setLoadFailed(false);
+    void refresh().catch(() => {
+      if (reloadOwner.current !== owner) return;
+      setLoading(false); setLoadFailed(true);
+    }).finally(() => { if (reloadOwner.current === owner) reloadOwner.current = null; });
+  }, [refresh]);
   useEffect(() => {
     if (!visible) return;
-    setPreviewIndex(null);
-    setPreviewDetails(false);
-    setDeleteNotice(false);
-    refresh().catch(() => setLoading(false));
-    return () => { refreshVersionRef.current += 1; };
-  }, [visible, refresh]);
+    setPreviewIndex(null); setPreviewDetails(false); setDeleteNotice(false);
+    reload();
+    return () => { reloadOwner.current = null; refreshVersionRef.current += 1; };
+  }, [visible, reload]);
 
   useEffect(() => {
     const item = previewIndex === null ? null : items[previewIndex];
@@ -275,11 +304,12 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
   const loadMore = useCallback(async () => {
     if (pageLoadingRef.current || deletingRef.current || items.length >= totalCount) return;
     pageLoadingRef.current = true;
+    setPageFailed(false);
     const version = refreshVersionRef.current;
     try {
       const next = await fetchTrashItems(120, items.length);
       if (version === refreshVersionRef.current && !deletingRef.current) setItems(previous => [...new Map([...previous,...next].map(item => [item.id,item])).values()]);
-    } catch { setDeleteNotice(true); }
+    } catch { setPageFailed(true); }
     finally { pageLoadingRef.current = false; }
   }, [items.length, totalCount]);
 
@@ -363,23 +393,19 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
   const cell = Math.floor((width - 8) / 3) - 8;
 
   const renderGrid = () => {
-    if (loading) {
-      return <Text style={styles.emptyText}>{t('common.loading')}</Text>;
-    }
-    if (items.length === 0) {
-      return (
-        <View style={styles.emptyWrap} {...closePanResponder.panHandlers}>
-          <MaoQiuIcon size={39} color="rgba(255,255,255,0.40)" />
-          <Text style={styles.emptyText}>{t('trash.emptyTitle')}</Text>
-          <Text style={styles.emptyHint}>{t('trash.emptyDesc')}</Text>
-        </View>
-      );
+    if (loading || loadFailed || items.length === 0) {
+      return <View style={styles.emptyWrap} {...closePanResponder.panHandlers}>
+        <Feedback variant="page" identity="trash-list" state={loading ? 'loading' : loadFailed ? 'error' : 'empty'}
+          title={t(loading ? 'common.loading' : loadFailed ? 'feedback.listFailed' : 'trash.emptyTitle')} detail={!loading && !loadFailed ? t('trash.emptyDesc') : undefined}
+          actionLabel={t('home.retryBtn')} onAction={loadFailed ? reload : undefined} />
+      </View>;
     }
     return (
       <FlatList
         data={items}
         numColumns={3}
-        onEndReached={loadMore}
+        onEndReached={pageFailed ? undefined : loadMore}
+        ListFooterComponent={pageFailed ? <Feedback variant="inline" state="error" title={t('feedback.listFailed')} actionLabel={t('home.retryBtn')} onAction={loadMore} /> : null}
         onEndReachedThreshold={1}
         windowSize={3}
         initialNumToRender={12}
@@ -393,12 +419,6 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
         }}
         renderItem={({ item, index }) => {
           const uri = photoUri(item);
-          const phUri = item.id ? (item.id.startsWith('ph://') ? item.id : `ph://${item.id}`) : null;
-          const videoSrc = item.thumbnailUri
-            || (item.displayUri && item.displayUri.startsWith('ph://') ? item.displayUri : null)
-            || (uri && uri.startsWith('ph://') ? uri : null)
-            || phUri;
-          const nativePreview = !uri && !isVideoAsset(item) ? item.previewUri : null;
           return (
             <Pressable
               style={[styles.cell, { width: cell, height: cell }]}
@@ -407,22 +427,9 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
                 setPreviewIndex(index);
               }}
             >
-              {supportsNativePhotoPreview ? (
-                <PhotoKitPreview priority={1} networkAccess purpose="trashGrid" assetId={item.id} style={styles.cellImg} resizeMode="cover" />
-              ) : isVideoAsset(item) ? (
-                <>
-                  <ExpoImage source={{ uri: videoSrc }} style={styles.cellImg} contentFit="cover" transition={100} />
-                  <View style={styles.videoCoverBadge} pointerEvents="none">
-                    <Ionicons name="play" size={11} color="#fff" />
-                  </View>
-                </>
-              ) : uri ? (
-                <ExpoImage source={{ uri }} style={styles.cellImg} contentFit="cover" transition={150} />
-              ) : nativePreview ? (
-                <PhotoKitPreview priority={1} networkAccess purpose="trashGrid" uri={nativePreview} style={styles.cellImg} resizeMode="cover" />
-              ) : (
-                <Ionicons name="image-outline" size={28} color="rgba(255,255,255,0.45)" />
-              )}
+              <MediaPreview assetId={item.id} uri={isVideoAsset(item) ? item.thumbnailUri : uri} purpose="trashGrid" priority={1} networkAccess
+                variant="tile" style={styles.cellImg} resizeMode="cover" />
+              {isVideoAsset(item) ? <View style={styles.videoCoverBadge} pointerEvents="none"><Ionicons name="play" size={11} color="#fff" /></View> : null}
 
               <View style={styles.cellRestoreBtn} pointerEvents="box-none">
                 <JellyPressable
@@ -430,7 +437,8 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
                     e?.stopPropagation?.();
                     handleRestore(item);
                   }}
-                  hitSlop={8}
+                  hitSlop={0}
+                  containerStyle={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
                 >
                   <GlassPanel style={styles.cellRestoreInner} radius={13} intensity={70}>
                     <Ionicons name="arrow-undo" size={12} color="#FFFFFF" />
@@ -478,16 +486,10 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
             const nativePreview = !uri && !isVideoAsset(item) ? item.previewUri : null;
             return (
               <View style={[styles.previewSlide, { width: previewWidth, height: previewHeight }]}>
-                {isVideoAsset(item) && item.displayUri ? (
-                  isCurrent ? <TrashVideoPreview key={item.id} uri={item.displayUri} /> : null
-                ) : supportsNativePhotoPreview && !isVideoAsset(item) ? (
-                  <PhotoKitPreview priority={0} purpose="trashPreview" assetId={item.id} style={styles.previewImg} resizeMode="contain" />
-                ) : uri && !isVideoAsset(item) ? (
-                  <ExpoImage source={{ uri }} style={styles.previewImg} contentFit="contain" transition={120} />
-                ) : nativePreview ? (
-                  <PhotoKitPreview priority={0} purpose="trashPreview" uri={nativePreview} style={styles.previewImg} resizeMode="contain" />
+                {isVideoAsset(item) ? (
+                  isCurrent ? <TrashVideoPreview key={item.id} item={item} /> : <MediaPreview assetId={item.id} uri={item.thumbnailUri} purpose="trashPreview" priority={1} feedback={false} style={styles.previewImg} />
                 ) : (
-                  <Ionicons name="videocam-outline" size={54} color="rgba(255,255,255,0.45)" />
+                  <MediaPreview assetId={item.id} uri={uri || nativePreview} purpose="trashPreview" priority={isCurrent ? 0 : 1} active={isCurrent} style={styles.previewImg} resizeMode="contain" />
                 )}
               </View>
             );
@@ -560,19 +562,17 @@ export default function TrashGallery({ visible, onClose, onChanged }) {
         {previewIndex === null && items.length > 0 ? (
           <View style={[styles.trashActionWrap, { bottom: insets.bottom + 16 }]} pointerEvents="box-none">
             {deleteNotice ? <Text style={styles.emptyHint} accessibilityLiveRegion="polite">{t('trash.emptyFailed')}</Text> : null}
-            <Text style={styles.deleteHint}>{t('trash.recentlyDeletedHint')}</Text>
+            <Text style={styles.deleteHint} accessibilityLiveRegion="polite">{t(deleting ? 'trash.emptyInProgress' : 'trash.recentlyDeletedHint')}</Text>
             <JellyPressable
               onPress={handleEmpty}
               disabled={deleting}
               accessibilityState={{ busy: deleting, disabled: deleting }}
-              accessibilityLabel={deleting ? t('trash.emptyInProgress') : t('trash.deleteAll', { count: totalCount })}
+              accessibilityLabel={t('trash.deleteAll', { count: totalCount })}
             >
               <GlassPanel style={styles.trashAction} radius={26} intensity={58}>
-                {deleting
-                  ? <ActivityIndicator size="small" color={colors.text} />
-                  : <Ionicons name="trash-outline" size={19} color={colors.danger} />}
-                <Text style={styles.trashActionText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>
-                  {deleting ? t('trash.emptyInProgress') : t('trash.deleteAll', { count: totalCount })}
+                <BusyMark visible={deleting}><Ionicons name="trash-outline" size={19} color={colors.danger} /></BusyMark>
+                <Text style={styles.trashActionText}>
+                  {t('trash.deleteAll', { count: totalCount })}
                 </Text>
               </GlassPanel>
             </JellyPressable>
@@ -629,7 +629,9 @@ const styles = StyleSheet.create({
     right: 18,
   },
   trashAction: {
-    height: 46,
+    minHeight: 46,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -637,6 +639,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239, 68, 68, 0.22)',
   },
   trashActionText: {
+    textAlign: 'center',
     color: colors.text,
     fontSize: 15,
     fontWeight: '700',

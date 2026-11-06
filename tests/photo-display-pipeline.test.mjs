@@ -94,8 +94,8 @@ test('every PhotoKitPreview call site carries a purpose tag', () => {
   assert.match(day, /purpose="day"/);
   const gridCount = (trash.match(/purpose="trashGrid"/g) || []).length;
   const previewCount = (trash.match(/purpose="trashPreview"/g) || []).length;
-  assert.equal(gridCount, 2, 'both trash grid branches tagged');
-  assert.equal(previewCount, 2, 'both trash preview branches tagged');
+  assert.equal(gridCount, 1, 'one shared thumbnail renderer carries the purpose');
+  assert.equal(previewCount, 3, 'photo and video poster previews carry the purpose');
 });
 test('useMediaWindow consumes the five display counters and each event line', () => {
   const code = read('src/useMediaWindow.js');

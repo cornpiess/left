@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MOTION, planExit } from '../src/motionCore.mjs';
 import { loadMotionRuntime } from './support/motion-runtime.mjs';
-import { renderComponent, flatten } from './support/render-component.mjs';
+import { renderComponent, flatten, displayMedia } from './support/render-component.mjs';
 
 function nativeDriver({ delayedStop = false } = {}) {
   const records = [], stops = [];
@@ -150,7 +150,7 @@ function card({ prepare = async () => true, delayedStop = false, favorite, memoi
   const driver = nativeDriver({ delayedStop });
   const removed = [], favorites = [], haptics = [];
   const props = {
-    item: { id: 'a', width: 3000, height: 4000, mediaType: 'photo' },
+    item: { id: 'a', width: 3000, height: 4000, mediaType: 'photo', displayUri: 'file://media' },
     items: [], active: true, preload: false, height: 800,
     onPrepareTrash: prepare, onTrash: item => removed.push(item.id),
     onFavoriteChange: value => favorites.push(value),
@@ -158,9 +158,9 @@ function card({ prepare = async () => true, delayedStop = false, favorite, memoi
   const runtime = renderComponent('components/MemoryCard.js', props, {
     'react-native': driver.native,
     'expo-haptics': { ImpactFeedbackStyle: { Light: 'light' }, impactAsync: type => { haptics.push(type); return Promise.resolve(); } },
-    ...(favorite ? { '../media': { isVideoAsset: () => false, isItemFavorite: () => false, toggleFavorite: favorite } } : {}),
+    ...(favorite ? { '../media': { isVideoAsset: () => false, isItemFavorite: () => false, reportMediaDisplaySuccess: () => {}, toggleFavorite: favorite } } : {}),
   }, { memoized });
-  const render = () => flatten(runtime.render()).find(node => node.props.onPanResponderRelease).props;
+  const render = () => flatten(displayMedia(runtime)).find(node => node.props.onPanResponderRelease).props;
   const handlers = render();
   return { ...driver, runtime, props, handlers, render, removed, favorites, haptics };
 }
@@ -180,7 +180,7 @@ test('centre-of-picture pinches share one hit target for portrait/landscape and 
         item, items: [item], active: true, preload: true, height: 800, showInfo: false,
         onPinchIn: asset => entered.push(asset.id),
       }, { 'react-native': driver.native, '../nativePhotoPreview': { supportsNativePhotoPreview: true } });
-      const tree = c.render();
+      const tree = displayMedia(c);
       const check = (node, passThrough = false) => {
         if (!node || typeof node !== 'object') return;
         if (Array.isArray(node)) { node.forEach(child => check(child, passThrough)); return; }
@@ -467,6 +467,8 @@ test('same-day cleanup advances as soon as the card exits, even while the decora
     '../useScrollLiveness': { __esModule: true, default: () => [false, () => {}] },
     '../i18n': { useI18n: () => ({ t: x => x, formatLocalizedDate: () => '' }) },
   });
+  const list = flatten(c.render()).find(n => n.props.renderItem && n.props.horizontal);
+  flatten(list.props.renderItem({ item: { id: 'a', width: 3000, height: 4000, mediaType: 'photo' }, index: 0 })).find(n => n.props.onMediaReady).props.onMediaReady({ id: 'a' });
   const button = flatten(c.render()).find(n => n.props.onPress && flatten(n).some(child => child.children.includes('dayCarousel.moveToMaoqiuBtn')));
   assert.equal(button.props.haptic, false);
   await button.props.onPress();
@@ -615,4 +617,15 @@ test('actual burst deck reuses back-card asset keys and retains the existing fou
     assert.equal(back.props.maxPixelSize, 512);
     assert.equal(back.props.priority, 1);
   }
+});
+
+
+test('an unseen or failed card never captures pinch or enters its day', () => {
+  const driver = nativeDriver(), entered = [];
+  const props = { item: { id: 'unseen', width: 3000, height: 4000, mediaType: 'photo' }, active: true, preload: true, height: 800, onPinchIn: item => entered.push(item.id) };
+  const c = renderComponent('components/MemoryCard.js', props, { 'react-native': driver.native, '../nativePhotoPreview': { supportsNativePhotoPreview: true } });
+  const attempt = () => { const h = c.render().props; assert.equal(h.onMoveShouldSetPanResponder(pinchTouch(100), gesture(0)), false); h.onTouchStart(pinchTouch(100)); h.onTouchMove(pinchTouch(70)); h.onTouchEnd(lifted); };
+  attempt();
+  flatten(c.render()).find(n => n.props.assetId === 'unseen' && n.props.onError).props.onError({ nativeEvent: { assetId: 'unseen', reason: 'offline' } });
+  attempt(); assert.deepEqual(entered, []);
 });

@@ -1,4 +1,5 @@
 export default {
+  feedback: { historyFailed: "整理紀錄暫未儲存，請稍後重試", unavailable: "暫不可用", listFailed: "暫時無法讀取相簿" },
   common: {
     appName: 'LeftSwipe',
     maoqiu: '待刪相簿',
@@ -61,6 +62,7 @@ export default {
     readingInfo: '讀取拍攝資訊…',
   },
   dayCarousel: {
+    loadFailed: "無法載入當天的照片，請重試",
     title: '回到那天',
     subtitle: '那天的 {count} 條回憶',
     loadingTitle: '正在檢索同日相冊...',

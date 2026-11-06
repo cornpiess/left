@@ -1,5 +1,6 @@
+import { BusyMark } from './Feedback';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Linking, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -87,7 +88,7 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
     return <View style={styles.planContent}>
       <View style={styles.planLabelRow}>
         <View style={styles.planLabelGroup}>
-          {pendingAction === plan ? <ActivityIndicator color={color} /> : <Ionicons name={yearly ? 'sparkles' : 'infinite'} size={18} color={color} />}
+          <BusyMark color={color} visible={pendingAction === plan}><Ionicons name={yearly ? 'sparkles' : 'infinite'} size={18} color={color} /></BusyMark>
           <Text style={[styles.planLabel, { color }]}>{label}</Text>
         </View>
         {promotion ? <View style={styles.saleBadge}>
@@ -262,7 +263,7 @@ export default function PaywallModal({ visible, reason = 'menu', onClose, onToas
               {/* Adaptive Flow Footer Actions */}
               <View style={styles.paywallActions}>
                 <JellyPressable containerStyle={styles.footerTouchTarget} disabled={Boolean(pendingAction)} style={[styles.paywallActionBtn, pendingAction && { opacity: 0.55 }]} onPress={handleRestore}>
-                  {pendingAction === 'restore' ? <ActivityIndicator size="small" color="#A6E1FF" /> : <Ionicons name="cart-outline" size={14} color="#A6E1FF" />}
+                  <BusyMark color="#A6E1FF" visible={pendingAction === 'restore'}><Ionicons name="cart-outline" size={14} color="#A6E1FF" /></BusyMark>
                   <Text style={styles.paywallActionText}>{t('paywall.restoreBtn')}</Text>
                 </JellyPressable>
 
