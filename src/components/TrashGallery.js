@@ -90,8 +90,9 @@ function TrashVideoPreview({ item }) {
   const { t } = useI18n();
   const [state, setState] = useState('loading');
   const [retry, setRetry] = useState(0);
-  const ready = useCallback(() => setState('ready'), []);
-  const fail = useCallback(() => setState('error'), []);
+  const cycle = useRef(retry); cycle.current = retry;
+  const ready = useCallback(() => { if (cycle.current === retry) setState('ready'); }, [retry]);
+  const fail = useCallback(() => { if (cycle.current === retry) setState('error'); }, [retry]);
   return <View style={StyleSheet.absoluteFill}>
     <MediaPreview assetId={item.id} uri={photoUri(item)} purpose="trashPreview" feedback={false} style={StyleSheet.absoluteFill} />
     {state !== 'error' && item.displayUri ? <TrashVideoPlayer key={retry} uri={item.displayUri} onReady={ready} onFailure={fail} /> : null}

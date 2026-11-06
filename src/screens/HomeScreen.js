@@ -1171,7 +1171,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
           };
           return (
             <View style={styles.center}>
-              <Feedback variant="page" state={loadStatus === 'all-viewed' ? 'complete' : ['error', 'limited-empty'].includes(loadStatus) ? 'error' : 'empty'}
+              <Feedback variant="page" state={loadStatus === 'cloud-pending' ? 'loading' : loadStatus === 'all-viewed' ? 'complete' : ['error', 'limited-empty'].includes(loadStatus) ? 'error' : 'empty'}
                 title={emptyCopy.title} detail={emptyCopy.hint} actionLabel={emptyCopy.action}
                 onAction={loadStatus === 'limited-empty' ? managePhotoAccess : loadStatus === 'all-viewed' ? handleResetViewedHistory : retryLoad} />
             </View>

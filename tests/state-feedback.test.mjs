@@ -158,3 +158,15 @@ test('neutral and failed toasts never show success checkmarks', () => {
   toast = flatten(c.render()).find(n => n.props.accessibilityLiveRegion === 'polite' && n.props.pointerEvents === 'none');
   assert.equal(flatten(toast).filter(n => n.props.name === 'checkmark').length, 1);
 });
+
+test('a player callback from a previous retry cannot fail its replacement', () => {
+  const props = { item: { id: 'v', mediaType: 'video', displayUri: 'ph://v', width: 1920, height: 1080 }, active: true, height: 800 };
+  const c = renderComponent('components/MemoryCard.js', props, { '../mediaPage.mjs': mediaPage, '../media': { isVideoAsset: () => true, isItemFavorite: () => false, reportMediaDisplayFailure() {}, reportMediaDisplaySuccess() {} } });
+  const player = () => flatten(c.render()).find(n => n.props.onFailure);
+  const old = player(); old.props.onFailure();
+  flatten(c.render()).find(n => n.props.onAction).props.onAction();
+  const key = player().props.key;
+  old.props.onFailure(); old.props.onFirstFrame();
+  assert.equal(player().props.key, key);
+  assert.ok(flatten(c.render()).some(n => n.props.state === 'loading'), 'old first frame must not claim readiness');
+});

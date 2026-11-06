@@ -691,6 +691,7 @@ function MemoryCard({
   const [ambientPhotoUri, setAmbientPhotoUri] = useState(null);
   const [stillStep, setStillStep] = useState(0);
   const [mediaRetry, setMediaRetry] = useState(0);
+  const mediaCycleRef = useRef(mediaRetry); mediaCycleRef.current = mediaRetry;
   const [photoFailure, setPhotoFailure] = useState(null);
   const [photoProgress, setPhotoProgress] = useState(null);
   const [videoFailure, setVideoFailure] = useState(false);
@@ -701,31 +702,31 @@ function MemoryCard({
   }, [item?.id]);
   const handlePhotoLoad = useCallback((event, step = 0) => {
     const id = event?.nativeEvent?.assetId || item.id;
-    if (id !== currentMediaIdRef.current) return;
+    if (id !== currentMediaIdRef.current || mediaCycleRef.current !== mediaRetry) return;
     setStillStep(step); setRenderedStep(step); setDisplayedMediaId(id);
     setPhotoFailure(null); setPhotoProgress(null);
     reportMediaDisplaySuccess(item);
-  }, [item.id]);
+  }, [item.id, mediaRetry]);
   const handlePhotoError = useCallback((event) => {
     const detail = event?.nativeEvent || {};
-    if ((detail.assetId && detail.assetId !== currentMediaIdRef.current) || detail.hasImage) return;
+    if ((detail.assetId && detail.assetId !== currentMediaIdRef.current) || detail.hasImage || mediaCycleRef.current !== mediaRetry) return;
     setPhotoFailure(detail.reason || 'load-failed'); setPhotoProgress(null);
     setDisplayedMediaId(null); setStillStep(3); reportMediaDisplayFailure(item);
-  }, [item.id]);
+  }, [item.id, mediaRetry]);
   const handlePhotoProgress = useCallback((event) => {
     const detail = event?.nativeEvent || {};
-    if (detail.assetId !== currentMediaIdRef.current) return;
+    if (detail.assetId !== currentMediaIdRef.current || mediaCycleRef.current !== mediaRetry) return;
     setStillStep(0); setPhotoFailure(null);
     setPhotoProgress(detail.phase === 'cloud' ? detail.progress : null);
-  }, []);
+  }, [mediaRetry]);
   const handleVideoFirstFrame = useCallback(() => {
-    if (item.id !== currentMediaIdRef.current) return;
+    if (item.id !== currentMediaIdRef.current || mediaCycleRef.current !== mediaRetry) return;
     setVideoFirstFrame(true); setDisplayedMediaId(item.id); reportMediaDisplaySuccess(item);
-  }, [item.id]);
+  }, [item.id, mediaRetry]);
   const handleVideoFailure = useCallback(() => {
-    if (item.id !== currentMediaIdRef.current) return;
+    if (item.id !== currentMediaIdRef.current || mediaCycleRef.current !== mediaRetry) return;
     setVideoFailure(true); reportMediaDisplayFailure(item);
-  }, [item.id]);
+  }, [item.id, mediaRetry]);
   const retryMedia = useCallback(() => {
     setPhotoFailure(null); setPhotoProgress(null); setVideoFailure(false); setVideoFirstFrame(false);
     setStillStep(0); setMediaRetry(value => value + 1);
