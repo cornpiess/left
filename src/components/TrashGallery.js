@@ -95,7 +95,7 @@ function TrashVideoPreview({ item }) {
   return <View style={StyleSheet.absoluteFill}>
     <MediaPreview assetId={item.id} uri={photoUri(item)} purpose="trashPreview" feedback={false} style={StyleSheet.absoluteFill} />
     {state !== 'error' && item.displayUri ? <TrashVideoPlayer key={retry} uri={item.displayUri} onReady={ready} onFailure={fail} /> : null}
-    <Feedback identity={`${item.id}:${retry}`} state={!item.displayUri ? 'error' : state} title={t(state === 'error' || !item.displayUri ? 'home.videoLoadFailed' : 'home.loadingHint')}
+    <Feedback identity={`${item.id}:${retry}`} state={!item.displayUri ? 'error' : state} title={t(state === 'error' || !item.displayUri ? 'home.videoLoadFailed' : 'common.loading')}
       actionLabel={t('home.retryBtn')} onAction={() => { setState('loading'); setRetry(value => value + 1); }} />
   </View>;
 }

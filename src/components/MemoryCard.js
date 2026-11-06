@@ -2182,7 +2182,7 @@ function MemoryCard({
         state={(isVideo ? videoFailure || !item.displayUri : stillStep === 3) ? 'error' : 'loading'}
         title={(isVideo ? videoFailure || !item.displayUri : stillStep === 3)
           ? t(photoFailure === 'offline' ? 'home.mediaOffline' : photoFailure === 'asset-missing' || photoFailure === 'permission' ? 'home.mediaUnavailable' : isVideo ? 'home.videoLoadFailed' : 'home.imageLoadFailed')
-          : t(photoProgress !== null && !isVideo ? 'home.cloudLoading' : 'home.loadingHint')}
+          : t(isVideo ? 'common.loading' : photoProgress !== null ? 'home.cloudLoading' : 'home.loadingHint')}
         progress={!isVideo ? photoProgress : null}
         actionLabel={t('home.retryBtn')} onAction={retryMedia} hint={t('home.mediaSkipHint')}
       /> : null}

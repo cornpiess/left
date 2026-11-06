@@ -64,20 +64,20 @@ export default function Feedback({ state = 'loading', identity = 'page', variant
   // The loading mark's centre is at stage centre. Content grows downwards;
   // measured short viewports clamp the whole block inside their safe bounds.
   const position = feedbackPosition(viewport, contentHeight);
-  const body = <Animated.View style={[styles.content, position.scroll ? styles.flowContent : viewport ? { top: position.top } : styles.unmeasured, { opacity }]}
+  const body = <Animated.View style={[styles.content, position.scroll ? styles.flowContent : viewport ? { top: position.top } : styles.unmeasured]}
     onLayout={event => setContentHeight(event.nativeEvent.layout.height)}
     accessibilityLiveRegion="polite" accessibilityState={{ busy: loading }} pointerEvents="box-none">
     {content}
   </Animated.View>;
-  return <View style={[styles.stage, style]} pointerEvents="box-none" onLayout={event => setViewport(event.nativeEvent.layout.height)}>
+  return <Animated.View style={[styles.stage, { opacity }, style]} pointerEvents="box-none" onLayout={event => setViewport(event.nativeEvent.layout.height)}>
     {position.scroll ? <ScrollView style={StyleSheet.absoluteFill} contentContainerStyle={styles.scrollContent}>{body}</ScrollView> : body}
-  </View>;
+  </Animated.View>;
 }
 
 const styles = StyleSheet.create({
   slot: { width: FEEDBACK.slot, height: FEEDBACK.slot, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   indicator: { width: FEEDBACK.indicator, height: FEEDBACK.indicator },
-  stage: { ...StyleSheet.absoluteFillObject, zIndex: 20 },
+  stage: { ...StyleSheet.absoluteFillObject, zIndex: 20, backgroundColor: 'rgba(0,0,0,0.78)' },
   content: { position: 'absolute', width: '100%', paddingHorizontal: 24, maxWidth: 360, alignSelf: 'center', alignItems: 'center', gap: 10 },
   unmeasured: { top: '50%' },
   flowContent: { position: 'relative' },
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   action: { minHeight: 44, minWidth: 100, maxWidth: '100%', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   actionText: { color: colors.text, fontSize: 14, lineHeight: 20, textAlign: 'center', flexShrink: 1 },
   pressed: { opacity: 0.65 }, disabled: { opacity: 0.4 },
-  inline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' },
+  inline: { backgroundColor: 'rgba(13,14,18,0.92)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' },
   tile: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 8 },
   tileText: { color: colors.textMuted, fontSize: 12, lineHeight: 16, textAlign: 'center' },
 });
