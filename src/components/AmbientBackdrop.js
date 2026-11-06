@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image as RNImage, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import PhotoKitPreview from './PhotoKitPreview';
 import { supportsNativePhotoPreview } from '../nativePhotoPreview';
@@ -38,6 +38,7 @@ export default function AmbientBackdrop({ source, style }) {
   // nextUri = new source currently loading in the background layer.
   const [frontUri, setFrontUri] = useState(null);
   const [nextUri, setNextUri] = useState(null);
+  const retryCount = useRef(0);
   const { width: winW, height: winH } = useWindowDimensions();
 
   // Normalize source URI.
@@ -52,6 +53,7 @@ export default function AmbientBackdrop({ source, style }) {
   // When the incoming source changes, queue it as nextUri.
   // The old frontUri stays visible until nextUri finishes loading.
   useEffect(() => {
+    retryCount.current = 0;
     const target = valid ? uri : null;
     if (target === frontUri) {
       // Same as currently displayed — clear the pending layer.
@@ -66,8 +68,9 @@ export default function AmbientBackdrop({ source, style }) {
   // onError. Requeue once after a beat so the backdrop heals instead of
   // freezing black forever.
   useEffect(() => {
-    if (!valid || !uri || uri === frontUri || nextUri) return;
+    if (!valid || !uri || uri === frontUri || nextUri || retryCount.current >= 1) return;
     const timer = setTimeout(() => {
+      retryCount.current += 1;
       setNextUri(current => (current === null ? uri : current));
     }, 1200);
     return () => clearTimeout(timer);
@@ -103,7 +106,7 @@ export default function AmbientBackdrop({ source, style }) {
           resizeMode="cover"
           blurRadius={BLUR_RADIUS}
           onLoad={handleNextLoad}
-          onError={() => setNextUri(null)}
+          onError={() => { if (!supportsNativePhotoPreview) setNextUri(null); }}
         />
       ) : null}
 

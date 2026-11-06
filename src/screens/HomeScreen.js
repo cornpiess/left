@@ -413,6 +413,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
       return;
     }
     if (event?.type === 'media-display-failed') { setLoadStatus('error'); return; }
+    if (event?.type === 'media-display-recovered') { if (!getUnresolvedMediaCount()) setLoadStatus('ready'); return; }
     if (event?.type === 'operation-failed') {
       void loadInitial();
       return;

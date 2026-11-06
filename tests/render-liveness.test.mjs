@@ -30,7 +30,8 @@ test('every scheduler drop path notifies its callbacks as cancelled', () => {
   assert.match(swift, /!enabled[\s\S]{0,400}notifyCancelled\(task\)/);
 });
 test('cancelled views re-arm instead of staying black', () => {
-  assert.match(swiftView, /if wasCancelled[\s\S]{0,700}setNeedsLayout\(\)/);
+  assert.match(swiftView, /case \.cancelled:[\s\S]{0,100}handleFailure\("cancelled"\)/);
+  assert.match(swiftView, /retryBudget\.delay[\s\S]{0,650}setNeedsLayout\(\)/);
 });
 test('errors are reported at every priority, not only priority 0', () => {
   const gated = /requestPriority == 0 \{ onError/;

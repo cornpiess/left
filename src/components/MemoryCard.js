@@ -31,6 +31,7 @@ import {
   getUriFallback,
   isVideoAsset,
   reportMediaDisplayFailure,
+  reportMediaDisplaySuccess,
   loadItemBasics,
   loadExif,
   loadLivePhotoUri,
@@ -228,7 +229,7 @@ function formatVideoTime(seconds) {
   return `${minutes}:${String(total % 60).padStart(2, '0')}`;
 }
 
-function MemoryVideo({ uri, playing, loop = true, onEnd, onFinish, onLoading, onDuration, rate = 1, onFirstFrame, style, showProgress, controlsActive, onPlayerChange, showView = true }) {
+function MemoryVideo({ uri, playing, loop = true, onEnd, onFinish, onLoading, onFailure, onDuration, rate = 1, onFirstFrame, style, showProgress, controlsActive, onPlayerChange, showView = true }) {
   const player = useVideoPlayer(uri, (p) => {
     try { p.loop = loop; } catch {}
     try { p.muted = true; } catch {}
@@ -331,14 +332,14 @@ function MemoryVideo({ uri, playing, loop = true, onEnd, onFinish, onLoading, on
           // Error entry must cut audio synchronously too (PRD 5.2) — the
           // native player usually stops itself, but never rely on it.
           silencePlayer(player);
-          if (playing) onEnd();
+          onFailure?.();
         }
       });
     } catch {}
     return () => {
       try { sub?.remove(); } catch {}
     };
-  }, [player, playing, onEnd, onLoading, onDuration, uri, restoreSavedPosition]);
+  }, [player, playing, onEnd, onLoading, onFailure, onDuration, uri, restoreSavedPosition]);
 
   useEffect(() => {
     let sub = null;
@@ -472,11 +473,12 @@ function MemoryVideo({ uri, playing, loop = true, onEnd, onFinish, onLoading, on
     if (!playing) return;
     const t = setTimeout(() => {
       if (status !== 'readyToPlay' || !firstFrameRef.current) {
-        onEnd();
+        silencePlayer(player);
+        onFailure?.();
       }
-    }, 10000);
+    }, 15000);
     return () => clearTimeout(t);
-  }, [playing, status, onEnd, uri]);
+  }, [playing, status, onFailure, player, uri]);
 
   if (status !== 'readyToPlay' || !showView) return null;
   const progress = duration > 0 ? Math.min(Math.max(position / duration, 0), 1) : 0;
@@ -688,6 +690,46 @@ function MemoryCard({
   const [videoThumb, setVideoThumb] = useState(null);
   const [ambientPhotoUri, setAmbientPhotoUri] = useState(null);
   const [stillStep, setStillStep] = useState(0);
+  const [mediaRetry, setMediaRetry] = useState(0);
+  const [photoFailure, setPhotoFailure] = useState(null);
+  const [photoProgress, setPhotoProgress] = useState(null);
+  const [videoFailure, setVideoFailure] = useState(false);
+  const currentMediaIdRef = useRef(item?.id);
+  currentMediaIdRef.current = item?.id;
+  useEffect(() => {
+    setPhotoFailure(null); setPhotoProgress(null); setVideoFailure(false);
+  }, [item?.id]);
+  const handlePhotoLoad = useCallback((event, step = 0) => {
+    const id = event?.nativeEvent?.assetId || item.id;
+    if (id !== currentMediaIdRef.current) return;
+    setStillStep(step); setRenderedStep(step); setDisplayedMediaId(id);
+    setPhotoFailure(null); setPhotoProgress(null);
+    reportMediaDisplaySuccess(item);
+  }, [item.id]);
+  const handlePhotoError = useCallback((event) => {
+    const detail = event?.nativeEvent || {};
+    if ((detail.assetId && detail.assetId !== currentMediaIdRef.current) || detail.hasImage) return;
+    setPhotoFailure(detail.reason || 'load-failed'); setPhotoProgress(null);
+    setDisplayedMediaId(null); setStillStep(3); reportMediaDisplayFailure(item);
+  }, [item.id]);
+  const handlePhotoProgress = useCallback((event) => {
+    const detail = event?.nativeEvent || {};
+    if (detail.assetId !== currentMediaIdRef.current) return;
+    setStillStep(0); setPhotoFailure(null);
+    setPhotoProgress(detail.phase === 'cloud' ? detail.progress : null);
+  }, []);
+  const handleVideoFirstFrame = useCallback(() => {
+    if (item.id !== currentMediaIdRef.current) return;
+    setVideoFirstFrame(true); setDisplayedMediaId(item.id); reportMediaDisplaySuccess(item);
+  }, [item.id]);
+  const handleVideoFailure = useCallback(() => {
+    if (item.id !== currentMediaIdRef.current) return;
+    setVideoFailure(true); reportMediaDisplayFailure(item);
+  }, [item.id]);
+  const retryMedia = useCallback(() => {
+    setPhotoFailure(null); setPhotoProgress(null); setVideoFailure(false); setVideoFirstFrame(false);
+    setStillStep(0); setMediaRetry(value => value + 1);
+  }, []);
   const [fallbackUri, setFallbackUri] = useState(null);
   const [burstBackdropUri, setBurstBackdropUri] = useState(null);
   const burstBackdropAnchorRef = useRef(null);
@@ -1661,25 +1703,35 @@ function MemoryCard({
     return () => {
       cancelled = true;
     };
-  }, [item, item?.displayUri, item?.imageUri, item?.localUri, item?.previewUri, isBurst]);
+  }, [item, item?.displayUri, item?.imageUri, item?.localUri, item?.previewUri, isBurst, mediaRetry]);
 
   useEffect(() => {
     // Watchdog: rescue a still that never fired load OR error on the FIRST
     // renderer only; afterwards the onError chain owns the fallback flow.
-    if (supportsNativePhotoPreview || isVideo || stillStep !== 0 || renderedStep >= 0) return;
+    if (supportsNativePhotoPreview || isVideo || stillStep !== 0 || displayedMediaId === item?.id) return;
     const t = setTimeout(() => setStillStep(1), 3500);
     return () => clearTimeout(t);
-  }, [isVideo, stillStep, renderedStep, item]);
+  }, [isVideo, stillStep, displayedMediaId, item]);
 
   useEffect(() => {
     // Tier 1 is a dead end — it re-renders the SAME source under the SAME
     // key, so the image never retries. If the photo still hasn't rendered,
     // escalate to the sandbox fallback (or the failure text when no
     // fallback exists) instead of leaving burst chrome over an empty canvas.
-    if (supportsNativePhotoPreview || isVideo || stillStep !== 1 || renderedStep >= 0) return;
+    if (supportsNativePhotoPreview || isVideo || stillStep !== 1 || displayedMediaId === item?.id) return;
     const t = setTimeout(() => setStillStep(fallbackUri ? 2 : 3), 3000);
     return () => clearTimeout(t);
-  }, [isVideo, stillStep, renderedStep, item, fallbackUri]);
+  }, [isVideo, stillStep, displayedMediaId, item, fallbackUri]);
+
+  useEffect(() => {
+    if (supportsNativePhotoPreview || isVideo || stillStep !== 2 || displayedMediaId === item?.id) return;
+    const timer = setTimeout(() => handlePhotoError(), 8000);
+    return () => clearTimeout(timer);
+  }, [isVideo, stillStep, displayedMediaId, item?.id, handlePhotoError]);
+
+  useEffect(() => {
+    if (!supportsNativePhotoPreview && !isVideo && stillStep === 3) reportMediaDisplayFailure(item);
+  }, [isVideo, stillStep, item?.id]);
 
   // Grace period before showing loading spinner: fast prefetched images (10-50ms)
   // NEVER flash a spinner, matching TikTok / Douyin instant browsing.
@@ -1922,46 +1974,43 @@ function MemoryCard({
                   {supportsNativePhotoPreview ? (
                     <PhotoKitPreview
                       key={`native-${item.id}`}
+                      retryVersion={mediaRetry}
                       assetId={item.id}
                       priority={active ? 0 : 1}
                       purpose={purpose}
                       style={styles.still}
                       resizeMode={stillFit === 'cover' ? 'cover' : 'contain'}
                       resolutionScale={zoomed ? 4 : 1}
-                      onLoad={() => { setStillStep(0); setRenderedStep(0); setDisplayedMediaId(item.id); }}
-                      onError={() => { setDisplayedMediaId(null); setStillStep(3); reportMediaDisplayFailure(item); }}
+                      onLoad={handlePhotoLoad}
+                      onError={handlePhotoError}
+                      onProgress={handlePhotoProgress}
                     />
                   ) : stillSource && stillStep < 2 ? (
                     <ExpoImage
-                      key={isBurst ? 'burst-photo-canvas' : `still-${item.id}-e0`}
+                      key={isBurst ? `burst-photo-canvas-${mediaRetry}` : `still-${item.id}-e0-${mediaRetry}`}
                       source={{ uri: stillSource }}
                       recyclingKey={stillSource}
                       cachePolicy="memory-disk"
                       style={styles.still}
                       contentFit={stillFit}
                       transition={isBurst ? 0 : 200}
-                      onLoad={() => { setStillStep(0); setRenderedStep(0); setDisplayedMediaId(item.id); }}
+                      onLoad={handlePhotoLoad}
                       onError={() => { setDisplayedMediaId(null); setStillStep(2); }}
                     />
                   ) : null}
                   {!supportsNativePhotoPreview && stillStep === 2 && stillFallbackSource ? (
                     <ExpoImage
-                      key={isBurst ? 'burst-photo-fb' : `still-${item.id}-e2`}
+                      key={isBurst ? `burst-photo-fb-${mediaRetry}` : `still-${item.id}-e2-${mediaRetry}`}
                       source={{ uri: stillFallbackSource }}
                       recyclingKey={stillFallbackSource}
                       style={styles.still}
                       contentFit={stillFit}
                       transition={isBurst ? 0 : 200}
-                      onLoad={() => { setRenderedStep(2); setDisplayedMediaId(item.id); }}
-                      onError={() => { setDisplayedMediaId(null); setStillStep(3); reportMediaDisplayFailure(item); }}
+                      onLoad={event => handlePhotoLoad(event, 2)}
+                      onError={handlePhotoError}
                     />
                   ) : null}
-                  {stillStep === 3 ? (
-                    <View style={styles.mediaFailed}>
-                      <Ionicons name="image-outline" size={30} color={colors.textMuted} />
-                      <Text style={styles.mediaFailedText}>{t('home.imageLoadFailed')}</Text>
-                    </View>
-                  ) : null}
+
                 </View>
               ) : null}
               </Animated.View>
@@ -1987,15 +2036,16 @@ function MemoryCard({
                     pointerEvents="none"
                   />
                 ) : null}
-                {showVideo && item.displayUri ? (
+                {showVideo && item.displayUri && !videoFailure ? (
                   <MemoryVideo
-                    key={`video-${item.id}`}
+                    key={`video-${item.id}-${mediaRetry}`}
                     uri={item.displayUri}
                     playing={active && playing}
                     loop
                     rate={videoRate}
                     onEnd={advanceFrame}
-                    onFirstFrame={() => { setVideoFirstFrame(true); setDisplayedMediaId(item.id); }}
+                    onFirstFrame={handleVideoFirstFrame}
+                    onFailure={handleVideoFailure}
                     showProgress={false}
                     controlsActive={active}
                     onPlayerChange={handleVideoPlayerChange}
@@ -2004,12 +2054,7 @@ function MemoryCard({
                   />
                 ) : null}
 
-                {active && !item.displayUri ? (
-                  <View style={styles.mediaFailed} pointerEvents="none">
-                    <Ionicons name="videocam-off-outline" size={30} color={colors.textMuted} />
-                    <Text style={styles.mediaFailedText}>{t('home.videoLoadFailed')}</Text>
-                  </View>
-                ) : null}
+
               </View>
             ) : null}
 
@@ -2049,11 +2094,28 @@ function MemoryCard({
             </Animated.View>
 
             {/* loading indicator (photo & video) — inside card for exact geometric center alignment */}
-            {active && !isBurst && showLoadingSpinner && ((showPhotoSurface && renderedStep === -1) || (isVideo && item.displayUri && !videoFirstFrame)) ? (
+            {active && showLoadingSpinner && !videoFailure && stillStep !== 3 && ((!isVideo && displayedMediaId !== item.id) || (isVideo && item.displayUri && !videoFirstFrame)) ? (
               <View style={styles.videoLoadingOverlay} pointerEvents="none">
                 <View style={styles.videoLoadingMark}>
                   <ActivityIndicator size="small" color="#fff" />
                 </View>
+                {!isVideo && photoProgress !== null ? (
+                  <Text style={styles.mediaLoadingText}>
+                    {t('home.cloudLoading')}{photoProgress > 0 ? ` ${Math.round(photoProgress * 100)}%` : ''}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            {active && (isVideo ? videoFailure || !item.displayUri : stillStep === 3) ? (
+              <View style={[StyleSheet.absoluteFillObject, styles.mediaFailed]} pointerEvents="box-none">
+                <Ionicons name={photoFailure === 'offline' ? 'cloud-offline-outline' : 'image-outline'} size={30} color={colors.textMuted} />
+                <Text style={styles.mediaFailedText}>
+                  {t(photoFailure === 'offline' ? 'home.mediaOffline' : photoFailure === 'asset-missing' || photoFailure === 'permission' ? 'home.mediaUnavailable' : isVideo ? 'home.videoLoadFailed' : 'home.imageLoadFailed')}
+                </Text>
+                <Pressable onPress={retryMedia} accessibilityRole="button" style={styles.mediaRetryButton}>
+                  <Text style={styles.mediaRetryText}>{t('home.retryBtn')}</Text>
+                </Pressable>
+                <Text style={styles.mediaFailedText}>{t('home.mediaSkipHint')}</Text>
               </View>
             ) : null}
 
@@ -2390,11 +2452,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    padding: 16,
+    zIndex: 32,
   },
   mediaFailedText: {
     color: colors.textMuted,
     fontSize: 13,
+    textAlign: 'center',
+    flexShrink: 1,
   },
+  mediaLoadingText: {
+    color: '#fff', fontSize: 12, textAlign: 'center', marginTop: 10,
+    backgroundColor: 'rgba(10,14,24,0.68)', padding: 6, borderRadius: 8,
+  },
+  mediaRetryButton: {
+    minHeight: 44, minWidth: 100, paddingHorizontal: 20, paddingVertical: 12,
+    alignItems: 'center', justifyContent: 'center', borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  mediaRetryText: { color: '#fff', fontSize: 14, textAlign: 'center' },
   bottomScrim: {
     position: 'absolute',
     left: 0,

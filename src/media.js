@@ -383,6 +383,12 @@ export function reportMediaDisplayFailure(item) {
   memorySession.failedDisplayIds.add(item.id);
   mediaUpdateListeners.forEach(listener => { try { listener({ type: 'media-display-failed', asset: item }); } catch {} });
 }
+export function reportMediaDisplaySuccess(item) {
+  if (!item?.id || !memorySession) return;
+  const recovered = memorySession.failedDisplayIds.delete(item.id);
+  const cloudRecovered = memorySession.failedCloudIds.delete(item.id);
+  if (recovered || cloudRecovered) mediaUpdateListeners.forEach(listener => { try { listener({ type: 'media-display-recovered', asset: item }); } catch {} });
+}
 export function getUnresolvedMediaCount() {
   return (memorySession?.failedDisplayIds.size || 0) + (memorySession?.failedCloudIds.size || 0);
 }

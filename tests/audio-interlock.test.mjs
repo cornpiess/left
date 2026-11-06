@@ -62,7 +62,8 @@ test('video error entry silences its player synchronously', async () => {
   assert.match(card, /if \(s === 'error'\) \{/);
   const errorBranch = card.split("if (s === 'error') {")[1]?.split('}')[0];
   assert.match(errorBranch, /silencePlayer\(player\);/);
-  assert.match(errorBranch, /if \(playing\) onEnd\(\);/);
+  assert.match(errorBranch, /onFailure\?\.\(\);/);
+  assert.doesNotMatch(errorBranch, /onEnd\(/, 'a cloud error must not advance the feed');
 });
 
 test('live photo players report upward so cancelled gestures can resume them', async () => {

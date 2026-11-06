@@ -64,21 +64,21 @@ public class MaoqiuPhotoPreviewModule: Module {
       PhotoResources.shared.snapshot()
     }.runOnQueue(.main)
     View(MaoqiuPhotoPreviewView.self) {
-      Events("onLoad", "onError")
+      Events("onLoad", "onError", "onProgress")
       Prop("assetId") { (view: MaoqiuPhotoPreviewView, value: String) in view.setAsset(value) }
       Prop("resizeMode") { (view: MaoqiuPhotoPreviewView, value: String) in
         view.contentView.imageView.contentMode = value == "cover" ? .scaleAspectFill : .scaleAspectFit
       }
       Prop("maxPixelSize") { (view: MaoqiuPhotoPreviewView, value: Double) in view.maxPixelSize = CGFloat(max(64, min(4096, value))); view.setNeedsLayout() }
       Prop("networkAccess") { (view: MaoqiuPhotoPreviewView, value: Bool) in view.networkAccess = value }
+      Prop("retryVersion") { (view: MaoqiuPhotoPreviewView, value: Int) in view.retryVersion = value }
       Prop("priority") { (view: MaoqiuPhotoPreviewView, value: Int) in view.requestPriority = value }
       Prop("purpose") { (view: MaoqiuPhotoPreviewView, value: String) in view.purpose = value }
       Prop("blurRadius") { (view: MaoqiuPhotoPreviewView, value: Double) in
         view.blurRadius = CGFloat(max(0, min(100, value)))
       }
       Prop("resolutionScale") { (view: MaoqiuPhotoPreviewView, value: Double) in
-        view.resolutionScale = CGFloat(max(1, min(4, value)))
-        view.setNeedsLayout()
+        view.setResolutionScale(CGFloat(max(1, min(4, value))))
       }
     }
   }
@@ -95,13 +95,17 @@ final class MaoqiuPhotoPreviewView: ExpoView {
   var imageView: UIImageView { contentView.imageView }
   let onLoad = EventDispatcher()
   let onError = EventDispatcher()
+  let onProgress = EventDispatcher()
+  var retryVersion = 0 { didSet { if oldValue != retryVersion { resumeLoading() } } }
+  private var loadBlocked = false
+  private var retryBudget = PhotoRetryBudget()
   var purpose = "feed"
   var resolutionScale: CGFloat = 1
   var requestPriority = 1 { didSet {
     guard oldValue != requestPriority, !coordinator.hasFinalImage else { return }
-    coordinator.markSizeChange(); setNeedsLayout()
+    resumeLoading()
   } }
-  var networkAccess = false { didSet { if oldValue != networkAccess && !coordinator.hasFinalImage { coordinator.markSizeChange(); setNeedsLayout() } } }
+  var networkAccess = false { didSet { if oldValue != networkAccess && !coordinator.hasFinalImage { resumeLoading() } } }
   var maxPixelSize: CGFloat = 4096
   var blurRadius: CGFloat = 0 { didSet {
     guard blurRadius != oldValue else { return }
@@ -131,15 +135,23 @@ final class MaoqiuPhotoPreviewView: ExpoView {
     contentView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     addSubview(contentView)
     observers.append(NotificationCenter.default.addObserver(forName: PhotoResources.contentReady, object: nil, queue: .main) { [weak self] note in
-      guard let self, self.imageView.image == nil, note.object as? String == self.coordinator.photoKey else { return }
-      self.coordinator.markSizeChange(); self.setNeedsLayout()
+      guard let self, self.loadBlocked, !self.coordinator.hasFinalImage, note.object as? String == self.coordinator.photoKey else { return }
+      self.resumeLoading()
     })
     observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
       // App-level "temporary leave": subscriptions die, the shown image stays.
       self?.cancelRequest()
       self?.coordinator.invalidatePending()
     })
-    observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.setNeedsLayout() })
+    observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+      guard let self else { return }
+      if self.requestPriority == 0 && !self.coordinator.hasFinalImage { self.resumeLoading() }
+      else { self.setNeedsLayout() }
+    })
+    observers.append(NotificationCenter.default.addObserver(forName: PhotoResources.availabilityChanged, object: nil, queue: .main) { [weak self] _ in
+      guard let self, self.window != nil, self.requestPriority == 0, !self.coordinator.hasFinalImage else { return }
+      self.resumeLoading()
+    })
   }
 
   func setAsset(_ value: String) {
@@ -147,6 +159,7 @@ final class MaoqiuPhotoPreviewView: ExpoView {
     let id = value.hasPrefix("ph://") ? String(value.dropFirst(5)) : value
     guard coordinator.switchPhoto(id) else { return }
     cancelRequest()
+    loadBlocked = false; retryBudget = PhotoRetryBudget()
     imageView.image = nil
     sourceImage = nil
     blurPipeline.reset()
@@ -154,6 +167,20 @@ final class MaoqiuPhotoPreviewView: ExpoView {
     reportedFirstAssign = false
     anomalyReportedGeneration = -1
     PhotoDiagnostics.shared.noteCleared(viewId: viewId, purpose: purpose, view: self, reason: "switch", generation: coordinator.generation)
+    setNeedsLayout()
+  }
+
+  func setResolutionScale(_ value: CGFloat) {
+    guard value != resolutionScale else { return }
+    resolutionScale = value
+    if loadBlocked { resumeLoading() } else { setNeedsLayout() }
+  }
+
+  private func resumeLoading() {
+    cancelRequest()
+    coordinator.markSizeChange()
+    loadBlocked = false; retryBudget = PhotoRetryBudget()
+    PhotoResources.shared.retry(coordinator.photoKey)
     setNeedsLayout()
   }
 
@@ -169,6 +196,8 @@ final class MaoqiuPhotoPreviewView: ExpoView {
       // image and its load state are RETAINED (P0 retention rule).
       cancelRequest()
       coordinator.invalidatePending()
+    } else if loadBlocked && requestPriority == 0 {
+      resumeLoading()
     } else {
       setNeedsLayout()
     }
@@ -178,7 +207,7 @@ final class MaoqiuPhotoPreviewView: ExpoView {
     super.layoutSubviews()
     dispatchPrecondition(condition: .onQueue(.main))
     contentView.frame = bounds
-    guard window != nil, bounds.width > 0, bounds.height > 0, !coordinator.photoKey.isEmpty else { return }
+    guard window != nil, !loadBlocked, bounds.width > 0, bounds.height > 0, !coordinator.photoKey.isEmpty else { return }
     checkDisplayAnomaly()
     let scale = window?.screen.scale ?? 2
     let size = PhotoResources.size(bounds.width * scale * resolutionScale, bounds.height * scale * resolutionScale, cap: maxPixelSize)
@@ -193,41 +222,56 @@ final class MaoqiuPhotoPreviewView: ExpoView {
     let version = coordinator.generation
     guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [coordinator.photoKey], options: nil).firstObject else {
       PhotoDiagnostics.shared.note(viewId: viewId, purpose: purpose, view: self, kind: "F", generation: version, reason: "asset-missing")
-      onError(["assetId": coordinator.photoKey])
+      handleFailure("asset-missing")
       return
     }
-    token = PhotoResources.shared.request(asset, size: size, priority: requestPriority, allowNetwork: networkAccess) { [weak self] image, degraded, wasCancelled in
-      self?.handleDelivery(image: image, degraded: degraded, wasCancelled: wasCancelled, version: version)
+    onProgress(["assetId": coordinator.photoKey, "phase": "local", "progress": 0])
+    token = PhotoResources.shared.request(asset, size: size, priority: requestPriority, allowNetwork: networkAccess) { [weak self] delivery in
+      self?.handleDelivery(delivery, version: version)
     }
   }
 
-  private func handleDelivery(image: UIImage?, degraded: Bool, wasCancelled: Bool, version: Int) {
+  private func handleDelivery(_ delivery: PhotoDelivery, version: Int) {
     dispatchPrecondition(condition: .onQueue(.main))
-    if version == coordinator.generation { token = nil }
-    guard coordinator.acceptsDelivery(generation: version, isFinal: !degraded) else {
-      if version != coordinator.generation {
-        PhotoDiagnostics.shared.noteDropped(viewId: viewId, purpose: purpose, view: self, generation: version, reason: "late-callback")
-      }
+    guard version == coordinator.generation else {
+      PhotoDiagnostics.shared.noteDropped(viewId: viewId, purpose: purpose, view: self, generation: version, reason: "late-callback")
       return
     }
-    if let image {
+    switch delivery {
+    case let .image(image, degraded):
+      // A degraded frame is a delivery, NOT request completion. Keep the
+      // subscription alive so swipe-away cancels the outstanding cloud work.
+      if !degraded { token = nil }
+      guard coordinator.acceptsDelivery(generation: version, isFinal: !degraded) else { return }
       display(image, isFinal: !degraded)
-      return
+    case let .progress(progress):
+      onProgress(["assetId": coordinator.photoKey, "phase": "cloud", "progress": progress])
+    case let .failure(reason):
+      token = nil
+      handleFailure(reason)
+    case .cancelled:
+      token = nil
+      handleFailure("cancelled")
     }
-    if wasCancelled {
-      // Scheduler dropped this request (memory pressure, eviction, window
-      // toggle): re-arm after a stagger. The shown image is never cleared.
-      coordinator.invalidatePending()
-      let delay = 0.35 + Double.random(in: 0...0.5)
+  }
+
+  private func handleFailure(_ reason: String) {
+    loadBlocked = true
+    coordinator.invalidatePending()
+    let version = coordinator.generation
+    PhotoDiagnostics.shared.note(viewId: viewId, purpose: purpose, view: self, kind: "F", generation: version, reason: reason)
+    if let delay = retryBudget.delay(reason: reason, foreground: requestPriority == 0), imageView.image == nil {
+      onProgress(["assetId": coordinator.photoKey, "phase": "retrying", "progress": 0])
       DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-        guard let self, self.window != nil, !self.coordinator.hasFinalImage, self.imageView.image == nil else { return }
-        self.coordinator.markSizeChange()
+        guard let self, self.window != nil, self.coordinator.generation == version else { return }
+        self.loadBlocked = false
         self.setNeedsLayout()
       }
-    } else if !degraded {
-      PhotoDiagnostics.shared.note(viewId: viewId, purpose: purpose, view: self, kind: "F", generation: version, reason: "load-failed")
-      onError(["assetId": coordinator.photoKey])
+    } else if imageView.image == nil {
+      onError(["assetId": coordinator.photoKey, "reason": reason, "hasImage": false])
     }
+    // If a preview is already visible, retain it without an error overlay or
+    // another spinner. A later explicit retry can still upgrade its quality.
   }
 
   private func display(_ image: UIImage, isFinal: Bool) {
@@ -243,7 +287,7 @@ final class MaoqiuPhotoPreviewView: ExpoView {
                                            generation: coordinator.generation, first: !reportedFirstAssign)
       reportedFirstAssign = true
       // onLoad only reports "committed to the view", never screen compositing.
-      if isFinal { onLoad(["assetId": coordinator.photoKey]) }
+      onLoad(["assetId": coordinator.photoKey, "degraded": !isFinal])
     }
     checkDisplayAnomaly()
   }
@@ -259,8 +303,9 @@ final class MaoqiuPhotoPreviewView: ExpoView {
     }
     guard let job = blurPipeline.submit(BlurPipeline.Job(key: blurKey(), source: source, isFinal: isFinal),
                                         hasDisplayedImage: imageView.image != nil) else {
-      // Coalesced: this exact content is already blurred and displayed.
-      if isFinal {
+      // A queued blur is not a displayed image. Only a genuinely coalesced,
+      // already rendered result may report readiness here.
+      if isFinal && imageView.image != nil && blurPipeline.isRendered(blurKey()) {
         coordinator.markDisplayed(isFinal: true)
         PhotoDiagnostics.shared.noteAssigned(viewId: viewId, purpose: purpose, view: self,
                                              generation: coordinator.generation, first: !reportedFirstAssign)
@@ -297,7 +342,7 @@ final class MaoqiuPhotoPreviewView: ExpoView {
       PhotoDiagnostics.shared.noteAssigned(viewId: self.viewId, purpose: self.purpose, view: self,
                                            generation: self.coordinator.generation, first: !self.reportedFirstAssign)
       self.reportedFirstAssign = true
-      if job.isFinal { self.onLoad(["assetId": self.coordinator.photoKey]) }
+      self.onLoad(["assetId": self.coordinator.photoKey, "degraded": !job.isFinal])
       self.checkDisplayAnomaly()
       if let next = self.blurPipeline.finish() { self.runBlur(next) }
     }
