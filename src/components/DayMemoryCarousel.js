@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, AppState, FlatList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, AppState, FlatList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import { GlassPanel, JellyPressable } from './Glass';
 import MemoryCard, { silenceAllPlayers } from './MemoryCard';
+import Feedback from './Feedback';
 import VideoProgressControl from './VideoProgressControl';
 import MaoQiuIcon from './MaoQiuIcon';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -14,7 +15,7 @@ import { isVideoAsset } from '../media';
 import useScrollLiveness from '../useScrollLiveness';
 import { MOTION, exitMotion, fadeMotion, settleMotion, useReducedMotion } from '../motion';
 
-export default function DayMemoryCarousel({ items, initialIndex = 0, loading, onExit, onTrash, onPrepareTrash, onViewed, paused = false, onWindowIndexChange, onInteractionChange, constrained = false, onLoadBefore, onLoadAfter, hasBefore = false, hasAfter = false }) {
+export default function DayMemoryCarousel({ items, initialIndex = 0, loading, error = false, onRetry, onExit, onTrash, onPrepareTrash, onViewed, paused = false, onWindowIndexChange, onInteractionChange, constrained = false, onLoadBefore, onLoadAfter, hasBefore = false, hasAfter = false }) {
   const { width: winWidth, height: winHeight } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
@@ -25,6 +26,8 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
   const [scrolling, setScrolling] = useScrollLiveness();
   const [activeVideoPlayer, setActiveVideoPlayer] = useState(null);
   const [trashingId, setTrashingId] = useState(null);
+  const [readyId, setReadyId] = useState(null);
+  const receiveMediaReady = useCallback(media => { setReadyId(media.id); onViewed?.(media); }, [onViewed]);
   const isTrashingRef = useRef(false);
   useEffect(() => { onInteractionChange?.(scrolling); }, [scrolling, onInteractionChange]);
   const { t, formatLocalizedDate } = useI18n();
@@ -227,6 +230,7 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
   const pendingTrashIdsRef = useRef(new Set());
 
   const handleTrashCurrent = useCallback(async () => {
+    if (readyId !== currentItem?.id) return;
     const availableItems = safeItems.filter((it) => it && !pendingTrashIdsRef.current.has(it.id));
     if (availableItems.length === 0) return;
 
@@ -264,7 +268,7 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
       handleCardTrash(targetItem);
       isTrashingRef.current = false;
     });
-  }, [safeItems, currentItem, handleCardTrash, trashAnim, btnPulse, prepareDayTrash, reduceMotion]);
+  }, [safeItems, currentItem, readyId, handleCardTrash, trashAnim, btnPulse, prepareDayTrash, reduceMotion]);
 
   const getItemLayout = useCallback(
     (_, index) => ({ length: interval, offset: interval * index, index }),
@@ -284,27 +288,16 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
         <GlassPanel style={styles.dateBadge} radius={23} intensity={50}>
           <Ionicons name="calendar-outline" size={16} color="#FFFFFF" />
           <Text style={styles.dateText}>{formatLocalizedDate(currentItem?.creationTime) || t('dayCarousel.title')}</Text>
-          <Text style={styles.counterText}>{`${activeIndex + 1}/${safeItems.length}`}</Text>
+          {!loading && !error && safeItems.length > 0 ? <Text style={styles.counterText}>{`${activeIndex + 1}/${safeItems.length}`}</Text> : null}
         </GlassPanel>
 
         <View style={{ width: 46 }} />
       </View>
 
       {/* Main Stream or Loading */}
-      {loading ? (
+      {safeItems.length === 0 ? (
         <View style={styles.loadingWrap}>
-          <GlassPanel style={styles.loadingCard} radius={24} intensity={60}>
-            <ActivityIndicator size="large" color="#FFFFFF" />
-            <Text style={styles.loadingTitle}>{t('dayCarousel.loadingTitle') || '正在检索同日相册...'}</Text>
-            <Text style={styles.loadingSubtitle}>{t('dayCarousel.loadingSub') || '正在查找当天拍摄的所有照片与视频'}</Text>
-          </GlassPanel>
-        </View>
-      ) : safeItems.length === 0 ? (
-        <View style={styles.loadingWrap}>
-          <GlassPanel style={styles.loadingCard} radius={24} intensity={60}>
-            <Ionicons name="images-outline" size={32} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.loadingTitle}>{t('dayCarousel.empty')}</Text>
-          </GlassPanel>
+          <Feedback variant="page" state={loading ? 'loading' : error ? 'error' : 'empty'} title={t(loading ? 'dayCarousel.loadingTitle' : error ? 'dayCarousel.loadFailed' : 'dayCarousel.empty')} actionLabel={t('home.retryBtn')} onAction={error ? onRetry : undefined} />
         </View>
       ) : (
         <FlatList
@@ -357,7 +350,7 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
                     maxWidth={slotWidth}
                     showAmbient={false}
                     active={isActive && appActive && !scrolling && !paused}
-                    onMediaReady={onViewed}
+                    onMediaReady={receiveMediaReady}
                     preload={Math.abs(index - activeIndex) <= 1}
                     retainPlayer={isActive && appActive && !paused}
                     constrained={constrained}
@@ -382,6 +375,10 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
         />
       )}
 
+      {safeItems.length > 0 && (loading || error) ? <View style={[styles.neighbourFeedback, { top: insets.top + 68 }]} pointerEvents="box-none">
+        <Feedback variant="inline" identity="day-neighbours" state={loading ? 'loading' : 'error'} title={t(loading ? 'dayCarousel.loadingTitle' : 'dayCarousel.loadFailed')} actionLabel={t('home.retryBtn')} onAction={onRetry} />
+      </View> : null}
+
       {/* Video Progress Control — video-only. MemoryCard tags live-photo
           players with `live: true`; a Live Photo is a looping motion clip,
           not a timeline video, so it must never get the scrub bar. */}
@@ -394,7 +391,7 @@ export default function DayMemoryCarousel({ items, initialIndex = 0, loading, on
 
       {/* Bottom Bar */}
       <View style={[styles.bottomBar, { bottom: insets.bottom + 12 }]} pointerEvents="box-none">
-        <JellyPressable onPress={handleTrashCurrent} hitSlop={10} haptic={false}>
+        <JellyPressable onPress={handleTrashCurrent} disabled={readyId !== currentItem?.id} accessibilityLabel={t('dayCarousel.moveToMaoqiuBtn')} hitSlop={10} haptic={false}>
           <Animated.View style={{ transform: [{ scale: btnPulse }] }}>
             <GlassPanel style={styles.trashBtn} radius={23} intensity={65}>
               <MaoQiuIcon size={29} color={colors.white} />
@@ -439,38 +436,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.2,
   },
+  neighbourFeedback: { position: 'absolute', left: 24, right: 24, zIndex: 30 },
   loadingWrap: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loadingCard: {
-    paddingHorizontal: 28,
-    paddingVertical: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.28)',
-    backgroundColor: 'rgba(20, 22, 28, 0.75)',
-    shadowColor: '#000000',
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  loadingTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 8,
-    letterSpacing: 0.6,
-  },
-  loadingSubtitle: {
-    color: 'rgba(255, 255, 255, 0.65)',
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 4,
-  },
+
   topHeader: {
     position: 'absolute',
     left: 18,

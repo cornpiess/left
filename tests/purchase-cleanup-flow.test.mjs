@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderComponent, flatten } from './support/render-component.mjs';
+import { renderComponent, flatten, displayMedia } from './support/render-component.mjs';
 const item={id:'photo',width:3000,height:4000,mediaType:'photo'};
 function card(prepare) {
  const animations=[];let finalized=0;
@@ -10,7 +10,7 @@ function card(prepare) {
  // Proxy must retain the known native implementation.
  const rn=new Proxy(native,{get:(o,k)=>Reflect.has(o,k)?Reflect.getOwnPropertyDescriptor(o,k)?.value:new Proxy(()=>({}),{get:()=>()=>({})})});
  const c=renderComponent('components/MemoryCard.js',{item,items:[item],active:true,preload:false,height:800,onPrepareTrash:prepare,onTrash:asset=>{assert.equal(asset.id,item.id);finalized++;}},{'react-native':rn});
- c.render();const commit=()=>c.slots.find(slot=>slot?.current?.commitTrash)?.current.commitTrash();
+ displayMedia(c);c.render();const commit=()=>c.slots.find(slot=>slot?.current?.commitTrash)?.current.commitTrash();
  return {commit,animations,get finalized(){return finalized;}};
 }
 test('quota denial rebounds the actual photo and never runs removal animation',async()=>{

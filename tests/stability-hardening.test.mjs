@@ -41,7 +41,7 @@ test('small hardening items (stability #6)', async () => {
   const loadNextPage = home.match(/const loadNextPage = useCallback\(async \(\) => \{[\s\S]*?\n  \}, \[makeFeed\]\);/)?.[0] || '';
   assert.match(loadNextPage, /catch \(err\)/, 'loadNextPage must not float rejections');
 
-  const preview = gallery.match(/function TrashVideoPreview\(\{ uri \}\) \{[\s\S]*?\n\}\);/)?.[0] || '';
+  const preview = gallery.match(/function TrashVideoPlayer[\s\S]*?function TrashVideoPreview/)?.[0] || '';
   assert.match(preview, /try \{/);
 
   const emptyTrash = media.slice(media.indexOf('const deletePendingTrash'), media.indexOf('/** Extract the paired video'));

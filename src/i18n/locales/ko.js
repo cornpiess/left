@@ -1,4 +1,5 @@
 export default {
+  feedback: { historyFailed: "정리 기록을 저장하지 못했어요. 나중에 다시 시도하세요", unavailable: "불러올 수 없음", listFailed: "앨범을 불러올 수 없어요" },
   common: {
     appName: 'LeftSwipe',
     maoqiu: '검토함',
@@ -61,6 +62,7 @@ export default {
     readingInfo: '촬영 정보 불러오는 중…',
   },
   dayCarousel: {
+    loadFailed: "그날의 사진을 불러오지 못했어요. 다시 시도하세요",
     title: '그날로 돌아가기',
     subtitle: '그날의 추억 {count}개',
     loadingTitle: '그날의 사진 검색 중...',

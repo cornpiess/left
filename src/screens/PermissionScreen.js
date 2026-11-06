@@ -1,5 +1,6 @@
+import { BusyMark } from '../components/Feedback';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, StyleSheet, Text, View } from 'react-native';
+import { AppState, Linking, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Haptics from 'expo-haptics';
@@ -88,17 +89,14 @@ export default function PermissionScreen({ onGranted, onUnsupported }) {
             style={styles.button}
             onPress={handlePress}
             disabled={status === 'requesting'}
+            accessibilityLabel={t(status === 'denied' ? 'permission.settingsBtn' : 'permission.grantBtn')}
+            accessibilityState={{ disabled: status === 'requesting', busy: status === 'requesting' }}
           >
-            {status === 'requesting' ? (
-              <ActivityIndicator color="#111827" />
-            ) : (
-              <View style={styles.btnRow}>
-                <Text style={styles.buttonText}>
-                  {status === 'denied' ? t('permission.settingsBtn') : t('permission.grantBtn')}
-                </Text>
-                <Ionicons name="arrow-forward" size={18} color="#111827" />
-              </View>
-            )}
+            <View style={styles.btnRow}>
+              <BusyMark color="#111827" visible={status === 'requesting'} />
+              <Text style={styles.buttonText}>{status === 'denied' ? t('permission.settingsBtn') : t('permission.grantBtn')}</Text>
+              <View style={{ width: 24 }} />
+            </View>
           </JellyPressable>
 
           {status === 'denied' && (
@@ -202,7 +200,8 @@ const styles = StyleSheet.create({
   },
   button: {
     width: '100%',
-    height: 50,
+    minHeight: 50,
+    paddingVertical: 12,
     borderRadius: 25,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
@@ -218,6 +217,7 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontSize: 16,
     fontWeight: '800',
+    flexShrink: 1, textAlign: 'center',
   },
   deniedTip: {
     color: '#EF4444',

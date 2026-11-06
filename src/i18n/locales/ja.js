@@ -1,4 +1,5 @@
 export default {
+  feedback: { historyFailed: "整理履歴を保存できませんでした。後でもう一度お試しください", unavailable: "読み込めません", listFailed: "アルバムを読み込めません" },
   common: {
     appName: 'LeftSwipe',
     maoqiu: 'レビューボックス',
@@ -61,6 +62,7 @@ export default {
     readingInfo: '撮影情報を読み込み中…',
   },
   dayCarousel: {
+    loadFailed: "この日の写真を読み込めませんでした。再試行してください",
     title: 'あの日を振り返る',
     subtitle: 'あの日の思い出 {count} 件',
     loadingTitle: '同日の写真を検索中...',

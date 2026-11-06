@@ -1,4 +1,5 @@
 export default {
+  feedback: { historyFailed: "Couldn’t save your review history. Try again later.", unavailable: "Unavailable", listFailed: "Unable to load this album right now" },
   common: {
     appName: 'LeftSwipe',
     maoqiu: 'Review Bin',
@@ -61,6 +62,7 @@ export default {
     readingInfo: 'Loading capture info...',
   },
   dayCarousel: {
+    loadFailed: "Couldn’t load photos from that day. Try again.",
     title: 'Back to That Day',
     subtitle: '{count} memories from that day',
     loadingTitle: 'Searching photos for that day...',

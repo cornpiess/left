@@ -1,4 +1,5 @@
 export default {
+  feedback: { historyFailed: "No se pudo guardar tu historial. Inténtalo de nuevo más tarde.", unavailable: "No disponible", listFailed: "No se puede cargar el álbum por ahora" },
   common: {
     appName: 'LeftSwipe',
     maoqiu: 'Cesta de revisión',
@@ -61,6 +62,7 @@ export default {
     readingInfo: 'Cargando info de captura...',
   },
   dayCarousel: {
+    loadFailed: "No se pudieron cargar las fotos de ese día. Inténtalo de nuevo.",
     title: 'Volver a Ese Día',
     subtitle: '{count} recuerdos de ese día',
     loadingTitle: 'Buscando fotos de ese día...',

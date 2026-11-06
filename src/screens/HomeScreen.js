@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   AppState,
   FlatList,
@@ -24,6 +23,7 @@ import { planFeedPrefetch, pruneReleasedBurstFrames } from '../mediaPage.mjs';
 import { experience, cleanup } from '../experience';
 import useMediaWindow from '../useMediaWindow';
 import useScrollLiveness from '../useScrollLiveness';
+import Feedback from '../components/Feedback';
 import { mergeDayWindow } from '../mediaWindow.mjs';
 import { supportsNativePhotoPreview } from '../nativePhotoPreview';
 import { isTrashAsset, mediaResources, getUnresolvedMediaCount } from '../media';
@@ -226,7 +226,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
         fadeMotion(toastAnim, 0, reduceMotion ? MOTION.reducedMs : MOTION.fadeMs).start(({ finished }) => {
           if (finished && toastVersion.current === version) setToast(null);
         });
-      }, 1500);
+      }, Math.min(5000, Math.max(kind === 'error' ? 3000 : 1500, String(msg).length * 75)));
     },
     [toastAnim, reduceMotion]
   );
@@ -523,7 +523,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
     try {
       listRef.current?.scrollToIndex({ index: 0, animated: false });
     } catch {}
-    showToast(t('menu.resetHistorySuccess'));
+    showToast(t('menu.resetHistorySuccess'), 'success');
     setMoreMenuOpen(false);
     await loadInitial({ discardCurrentFeed: true });
   }, [loadInitial, showToast, t]);
@@ -533,7 +533,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
   const handleRateApp = useCallback(async () => {
     const opened = await openAppStoreReview();
     if (!opened) {
-      showToast(t('rating.toastFailed'));
+      showToast(t('rating.toastFailed'), 'error');
       return;
     }
     setRatingState((prev) => {
@@ -640,6 +640,35 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
   const dayLoadRef = useRef(new Set());
   const dayOpenRequestRef = useRef(null);
 
+  const fetchDayNeighbours = useCallback(async (anchor, request) => {
+      try {
+        const session = openDaySession(anchor);
+        daySessionRef.current = session;
+        const before = await fetchDayPage(session, 'before');
+        const after = await fetchDayPage(session, 'after');
+        if (dayOpenRequestRef.current !== request || daySessionRef.current !== session) return;
+        const items = [...before, anchor, ...after];
+        const initialIndex = before.length;
+        setDayWindowIndex(initialIndex);
+        setDayBrowse({ items, initialIndex, loading: false, hasBefore: session.more('before'), hasAfter: session.more('after') });
+      } catch {
+        if (dayOpenRequestRef.current !== request) return;
+        // The gesture succeeded even if neighbour retrieval fails. Keep its
+        // anchor visible and report the failure instead of silently bouncing.
+        setDayBrowse({ items: [anchor], initialIndex: 0, loading: false, error: true });
+        setScrolling(false);
+      } finally {
+        if (dayOpenRequestRef.current === request) dayOpenRequestRef.current = null;
+      }
+  }, []);
+  const retryDayBrowse = useCallback(() => {
+    if (dayOpenRequestRef.current || !dayBrowse?.items?.length) return;
+    const anchor = dayBrowse.items[dayWindowIndex] || dayBrowse.items[0];
+    const request = {}; dayOpenRequestRef.current = request;
+    setDayBrowse(previous => ({ ...previous, loading: true, error: false }));
+    void fetchDayNeighbours(anchor, request);
+  }, [dayBrowse, dayWindowIndex, fetchDayNeighbours]);
+
   const enterDayBrowse = useCallback(
     async (anchor) => {
       if (!anchor || dayBrowse || dayOpenRequestRef.current) return;
@@ -659,26 +688,9 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
       setScrolling(true);
       setDayWindowIndex(0);
       setDayBrowse({ items: [anchor], initialIndex: 0, loading: true });
-      try {
-        const session = openDaySession(anchor);
-        daySessionRef.current = session;
-        const before = await fetchDayPage(session, 'before');
-        const after = await fetchDayPage(session, 'after');
-        if (dayOpenRequestRef.current !== request || daySessionRef.current !== session) return;
-        const items = [...before, anchor, ...after];
-        const initialIndex = before.length;
-        setDayWindowIndex(initialIndex);
-        setDayBrowse({ items, initialIndex, loading: false, hasBefore: session.more('before'), hasAfter: session.more('after') });
-      } catch {
-        if (dayOpenRequestRef.current !== request) return;
-        // The gesture succeeded even if neighbour retrieval fails. Keep its
-        // anchor visible and report the failure instead of silently bouncing.
-        setDayBrowse({ items: [anchor], initialIndex: 0, loading: false });
-        showToast(t('home.toastMoveFailed'));
-        setScrolling(false);
-      }
+      await fetchDayNeighbours(anchor, request);
     },
-    [dayBrowse, activeVideoPlayer, showToast, t]
+    [dayBrowse, activeVideoPlayer, fetchDayNeighbours]
   );
 
   const loadDaySide = useCallback(async side => {
@@ -697,7 +709,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
         }
         return { ...previous, items: merged.items, hasBefore: session.more('before'), hasAfter: session.more('after') };
       });
-    } catch { showToast(t('home.toastMoveFailed')); }
+    } catch { showToast(t('dayCarousel.loadFailed'), 'error'); }
     finally { dayLoadRef.current.delete(side); }
   }, [showToast, t]);
   const loadDayBefore = useCallback(() => { void loadDaySide('before'); }, [loadDaySide]);
@@ -776,7 +788,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
       }
       return true;
     } catch {
-      showToast(t('home.toastMoveFailed'));
+      showToast(t('home.toastMoveFailed'), 'error');
       return false;
     }
   }, [showToast, t, dayBrowse]);
@@ -798,7 +810,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
 
       const rawIndex = rawAssetsRef.current.findIndex((item) => item.id === cur.id);
       setUndoTrash({ item: cur, rawIndex });
-      showToast(t('home.toastMovedToMaoqiu'));
+      showToast(t('home.toastMovedToMaoqiu'), 'success');
       refreshTrashSummary();
 
       // The trashed asset STAYS in rawAssetsRef — makeFeed filters by
@@ -870,7 +882,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
   const handleDayTrash = useCallback(
     (item) => {
       if (!item) {
-        showToast(t("home.toastMoveFailed"));
+        showToast(t("home.toastMoveFailed"), 'error');
         return;
       }
       try {
@@ -915,11 +927,11 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
           return { ...prev, items: remaining };
         });
 
-        showToast(t('home.toastMovedToMaoqiu'));
+        showToast(t('home.toastMovedToMaoqiu'), 'success');
         refreshTrashSummary();
       } catch (err) {
         console.error('[handleDayTrash] Exception:', err);
-        showToast(t("home.toastMoveFailed"));
+        showToast(t("home.toastMoveFailed"), 'error');
       }
     },
     [activeVideoPlayer, listH, makeFeed, refreshTrashSummary, scheduleUnlock, showToast, t]
@@ -1052,14 +1064,14 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
           journeyRef.current.firstPhoto = true;
           flightEvent('first-photo-ready', Date.now() - journeyRef.current.startedAt);
         }
-      }).catch(() => showToast(t('home.toastMoveFailed')));
+      }).catch(() => showToast(t('feedback.historyFailed'), 'error'));
   }, [showToast, t, dayBrowse, scrolling, saveBrowse]);
   const handleDayMediaReady = useCallback((item) => {
     if (!dayBrowse || dayScrolling || dayBrowse.items[dayWindowIndex]?.id !== item?.id) return;
     getBrowseSession().enterDay(dayBrowse.items, item.id, getBrowseSession().state.anchorId);
     saveBrowse();
     void experience.expose(item, { source: 'day', ready: true, stable: true })
-      .catch(() => showToast(t('home.toastMoveFailed')));
+      .catch(() => showToast(t('feedback.historyFailed'), 'error'));
   }, [showToast, t, dayBrowse, dayScrolling, dayWindowIndex, saveBrowse]);
   useEffect(() => {
     mediaResources.setInteractive(dayBrowse ? dayScrolling : scrolling || cardHorizontalGestureActive);
@@ -1113,8 +1125,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
       <View style={styles.listWrap} onLayout={handleListLayout}>
         {loading && !feed.length ? (
           <View style={styles.center}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={[styles.emptyHint, { marginTop: 16 }]}>{t('home.loadingHint')}</Text>
+            <Feedback variant="page" identity="startup" title={t('home.loadingHint')} />
           </View>
         ) : !rawAssetsRef.current.length ? (() => {
           // Distinct "still preparing" state: while the auto-retry safety net
@@ -1123,8 +1134,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
           if (loadStatus === 'empty-library' && emptyRetryCount < EMPTY_LIBRARY_RETRY_LIMIT) {
             return (
               <View style={styles.center}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={[styles.emptyHint, { marginTop: 16 }]}>{t('home.preparingHint')}</Text>
+                <Feedback variant="page" identity="preparing" title={t('home.preparingHint')} />
               </View>
             );
           }
@@ -1161,13 +1171,9 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
           };
           return (
             <View style={styles.center}>
-              <Ionicons name="images-outline" size={64} color={colors.textMuted} />
-              <Text style={styles.emptyText}>{emptyCopy.title}</Text>
-              <Text style={styles.emptyHint}>{emptyCopy.hint}</Text>
-              <Pressable style={styles.refreshBtn} onPress={loadStatus === 'limited-empty' ? managePhotoAccess : loadStatus === 'all-viewed' ? handleResetViewedHistory : retryLoad}>
-                <Ionicons name="refresh" size={16} color="#fff" />
-                <Text style={styles.refreshBtnText}>{emptyCopy.action}</Text>
-              </Pressable>
+              <Feedback variant="page" state={loadStatus === 'cloud-pending' ? 'loading' : loadStatus === 'all-viewed' ? 'complete' : ['error', 'limited-empty'].includes(loadStatus) ? 'error' : 'empty'}
+                title={emptyCopy.title} detail={emptyCopy.hint} actionLabel={emptyCopy.action}
+                onAction={loadStatus === 'limited-empty' ? managePhotoAccess : loadStatus === 'all-viewed' ? handleResetViewedHistory : retryLoad} />
             </View>
           );
         })() : dayBrowse ? (
@@ -1175,6 +1181,8 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
             items={dayBrowse.items}
             initialIndex={dayBrowse.initialIndex}
             loading={dayBrowse.loading}
+            error={dayBrowse.error}
+            onRetry={retryDayBrowse}
             onExit={exitDayBrowse}
             onWindowIndexChange={setDayWindowIndex}
             onInteractionChange={setDayScrolling}
@@ -1220,11 +1228,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
             renderItem={({ item, index }) => {
               if (item.kind === 'retry') {
                 return <View style={[styles.center, { height: listH }]}>
-                  <Text style={styles.emptyText}>{t('home.emptyErrorTitle')}</Text>
-                  <Text style={styles.emptyHint}>{t('home.emptyErrorHint')}</Text>
-                  <Pressable style={styles.refreshBtn} onPress={retryLoad}>
-                    <Text style={styles.refreshBtnText}>{t('home.retryBtn')}</Text>
-                  </Pressable>
+                  <Feedback variant="page" state="error" title={t('home.emptyErrorTitle')} detail={t('home.emptyErrorHint')} actionLabel={t('home.retryBtn')} onAction={retryLoad} />
                 </View>;
               }
               if (item.kind === 'complete') {
@@ -1236,13 +1240,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
                 });
                 return (
                   <View style={[styles.center, { height: listH }]}>
-                    <Ionicons name="checkmark-circle-outline" size={64} color={colors.primary} />
-                    <Text style={styles.emptyText}>{t('home.allViewedTitle')}</Text>
-                    <Text style={styles.emptyHint}>{t('home.allViewedHint')}</Text>
-                    <Pressable style={styles.refreshBtn} onPress={handleResetViewedHistory}>
-                      <Ionicons name="refresh" size={16} color="#fff" />
-                      <Text style={styles.refreshBtnText}>{t('home.restart')}</Text>
-                    </Pressable>
+                    <Feedback variant="page" state="complete" title={t('home.allViewedTitle')} detail={t('home.allViewedHint')} actionLabel={t('home.restart')} onAction={handleResetViewedHistory}>
                     {ratingVisible ? (
                       <GlassPanel style={styles.ratingCard} radius={20} intensity={55}>
                         <View style={styles.ratingCardHead}>
@@ -1259,6 +1257,7 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
                         </Pressable>
                       </GlassPanel>
                     ) : null}
+                    </Feedback>
                   </View>
                 );
               }
@@ -1414,28 +1413,12 @@ export default function HomeScreen({ accessPrivileges = 'all' }) {
               transform: [{ translateY: toastY }],
             },
           ]}
-          pointerEvents="none"
+          pointerEvents="none" accessibilityLiveRegion="polite"
         >
           <GlassPanel style={styles.toastPill} radius={20} intensity={65} shadow={true}>
-            <Ionicons
-              name={
-                toast.kind === 'unfavorite'
-                  ? 'heart-dislike-outline'
-                  : toast.kind === 'favorite'
-                  ? 'heart'
-                  : toast.kind === 'undo'
-                  ? 'arrow-undo'
-                  : 'checkmark-circle'
-              }
-              size={15}
-              color={
-                toast.kind === 'unfavorite'
-                  ? colors.textMuted
-                  : toast.kind === 'favorite'
-                  ? colors.fav
-                  : colors.success
-              }
-            />
+            {['favorite', 'unfavorite', 'undo', 'success'].includes(toast.kind) ? <Ionicons
+              name={{ favorite: 'heart', unfavorite: 'heart-dislike-outline', undo: 'arrow-undo', success: 'checkmark' }[toast.kind]}
+              size={15} color={colors.text} accessible={false} /> : null}
             <Text style={styles.toastText}>{toast.text}</Text>
           </GlassPanel>
         </Animated.View>
@@ -1456,31 +1439,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     gap: 12,
     paddingHorizontal: 24,
-  },
-  emptyText: {
-    color: colors.textMuted,
-    fontSize: 16,
-  },
-  emptyHint: {
-    color: colors.textMuted,
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  refreshBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(139,92,246,0.25)',
-    borderColor: colors.primarySoft,
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  refreshBtnText: {
-    color: '#fff',
-    fontSize: 13,
   },
   ratingCard: {
     width: '100%',

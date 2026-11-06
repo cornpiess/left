@@ -86,7 +86,7 @@ function MemoryInfoPanel({ item, groupIndex = 0, groupCount = 1, top }) {
             {place ? <DetailLine icon="location-outline">{place}</DetailLine> : null}
             {item.filename ? <DetailLine icon="document-outline">{item.filename}</DetailLine> : null}
             {dimensions ? <DetailLine icon="expand-outline">{dimensions}</DetailLine> : null}
-            {size === null ? <DetailLine icon="hourglass-outline">{t('common.loading')}</DetailLine> : null}
+            {size === null ? <Text style={styles.place}>{t('home.readingInfo')}</Text> : null}
             {size > 0 ? <DetailLine icon="folder-outline">{formatBytes(size)}</DetailLine> : null}
             {camera ? <DetailLine icon="camera-outline">{camera}</DetailLine> : null}
             {exifValue(exif, 'LensModel', 'LensInfo') ? <DetailLine icon="scan-outline">{exifValue(exif, 'LensModel', 'LensInfo')}</DetailLine> : null}

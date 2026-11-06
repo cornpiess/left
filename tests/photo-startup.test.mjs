@@ -172,7 +172,7 @@ test('the actual Home retry button shows loading, blocks duplicate taps and reco
   await entered;
   assert.equal(c.slots[1], true);
   assert.equal(button.props.onPress(), undefined);
-  assert.ok(flatten(c.render()).some(n => n.children.includes('home.loadingHint')));
+  assert.ok(flatten(c.render()).some(n => n.props.state !== 'error' && n.props.title === 'home.loadingHint'), 'the shared loading state owns the grace period');
   release(); await pending;
   assert.equal(c.slots[1], false); assert.equal(c.slots[2], 'ready'); assert.equal(c.slots[3], null);
   assert.ok(c.slots[0].length > 0);
