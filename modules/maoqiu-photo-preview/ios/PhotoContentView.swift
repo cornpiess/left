@@ -145,6 +145,8 @@ final class BlurPipeline {
 
   /// Only a successful render may claim the dedup key: failures stay
   /// retryable instead of poisoning future submits.
+  func isRendered(_ key: String) -> Bool { lastRenderedKey == key }
+
   func markRendered(_ key: String) {
     lastRenderedKey = key
   }

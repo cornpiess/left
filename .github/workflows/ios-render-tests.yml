@@ -9,6 +9,8 @@ name: iOS render regression tests
 #                     errors in the pod. Never signs, never uploads.
 on:
   workflow_dispatch:
+  pull_request:
+    paths: ['modules/maoqiu-photo-preview/**', 'src/components/MemoryCard.js', '.github/workflows/ios-render-tests.yml']
   push:
     branches: [main]
     paths: ['modules/maoqiu-photo-preview/**']

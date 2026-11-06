@@ -25,6 +25,7 @@ export default function useMediaWindow({ nextItems, width, height, interactive, 
             mem: Math.round(snapshot.residentMiB), peak: Math.round(snapshot.sampledPeakMiB), hits: snapshot.memoryCacheHits,
             req: snapshot.imageRequests, rdy: snapshot.readyImages, ms: Math.round(snapshot.meanLoadMs), hot: snapshot.constrained,
             err: snapshot.errorCount, cxl: snapshot.cancelledCount,
+            cloud: snapshot.cloudRequests, timeout: snapshot.timeoutCount, preview: snapshot.previewDeliveries, offline: snapshot.offlineCount,
             asg: snapshot.assignedImages, drp: snapshot.droppedCallbacks, clr: snapshot.clearedImages, ano: snapshot.layoutAnomalies,
           });
           // Display-chain diagnostics arrive as pre-clamped one-line events

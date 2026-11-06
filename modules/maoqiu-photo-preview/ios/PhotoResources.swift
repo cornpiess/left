@@ -1,6 +1,7 @@
 import Photos
 import UIKit
 import Darwin
+import Network
 
 /// Bounded, main-thread diagnostics for the photo DISPLAY chain (P0 fix).
 /// Records carry view identity + geometry state, never photo IDs or paths.
@@ -75,6 +76,13 @@ final class PhotoDiagnostics {
   }
 }
 
+enum PhotoDelivery {
+  case image(UIImage, degraded: Bool)
+  case progress(Double)
+  case failure(String)
+  case cancelled
+}
+
 // One PhotoKit/cache/request budget shared by the feed, background and grid.
 // All mutations run on the main queue; PhotoKit performs decoding asynchronously.
 final class PhotoResources: NSObject {
@@ -89,10 +97,23 @@ final class PhotoResources: NSObject {
     let size: CGSize
     let network: Bool
     var priority: Int
-    var callbacks: [UUID: (UIImage?, Bool, Bool) -> Void]
+    var callbacks: [UUID: (PhotoDelivery) -> Void]
+    var cloud = false
     var request = PHInvalidImageRequestID
+    var epoch = UUID()
     var started: CFTimeInterval = 0
+    var clock: PhotoLoadClock?
+    var deadline: DispatchWorkItem?
+    var deadlineEpoch = UUID()
   }
+  private let previews = NSCache<NSString, UIImage>()
+  private var monitor: NWPathMonitor?
+  private var networkAvailable = true
+  private var lastRecovery: CFTimeInterval = -100
+  private var cloudFailures: [String: CFTimeInterval] = [:]
+  private var cloudPauseUntil: CFTimeInterval = 0
+  private var cloudRequests = 0.0, timeouts = 0.0, previewDeliveries = 0.0, offlineCount = 0.0
+  static let availabilityChanged = Notification.Name("MaoqiuPhotoAvailabilityChanged")
   private var tasks: [UUID: Task] = [:]
   private var tokens: [UUID: UUID] = [:]
   private var preheated: [(PHAsset, CGSize)] = []
@@ -112,10 +133,13 @@ final class PhotoResources: NSObject {
     super.init()
     cache.totalCostLimit = 48 * 1024 * 1024
     cache.countLimit = 24
+    previews.totalCostLimit = 12 * 1024 * 1024
+    previews.countLimit = 24
     let center = NotificationCenter.default
     observers.append(center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
       self?.pressureUntil = CACurrentMediaTime() + 30
       self?.cache.removeAllObjects()
+      self?.previews.removeAllObjects()
       self?.stopPreheat()
       self?.cancelBackground()
     })
@@ -127,7 +151,8 @@ final class PhotoResources: NSObject {
   private func updatePressure() {
     constrained = ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
     cache.totalCostLimit = constrained ? 16 * 1024 * 1024 : 48 * 1024 * 1024
-    if constrained { cache.removeAllObjects(); stopPreheat(); cancelBackground() }
+    previews.totalCostLimit = constrained ? 4 * 1024 * 1024 : 12 * 1024 * 1024
+    if constrained { cache.removeAllObjects(); previews.removeAllObjects(); stopPreheat(); cancelBackground() }
     pump()
   }
   static func size(_ width: CGFloat, _ height: CGFloat, cap: CGFloat = 4096) -> CGSize {
@@ -140,15 +165,15 @@ final class PhotoResources: NSObject {
     o.isSynchronous = false; o.resizeMode = .fast; o.deliveryMode = .opportunistic; o.isNetworkAccessAllowed = network
     return o
   }
-  func request(_ asset: PHAsset, size: CGSize, priority: Int, allowNetwork: Bool = false, callback: @escaping (UIImage?, Bool, Bool) -> Void) -> UUID {
+  func request(_ asset: PHAsset, size: CGSize, priority: Int, allowNetwork: Bool = false, callback: @escaping (PhotoDelivery) -> Void) -> UUID {
     let token = UUID(), k = key(asset.localIdentifier, size)
     if let image = cache.object(forKey: k as NSString) {
       hits += 1
-      DispatchQueue.main.async { callback(image, false, false) }
+      DispatchQueue.main.async { callback(.image(image, degraded: false)) }
       return token
     }
-    // Neighbours (priority 1) are user-visible next; blocking iCloud for them
-    // leaves blank cards on iCloud-heavy libraries until they become active.
+    // Local thumbnails always go first. Only current/adjacent content or an
+    // explicitly visible grid may escalate to a cloud request.
     let network = priority <= 1 || allowNetwork
     if let id = tasks.first(where: { $0.value.key == k && ($0.value.network || !network) })?.key {
       var existing = tasks[id]!
@@ -160,39 +185,141 @@ final class PhotoResources: NSObject {
       let id = UUID()
       tasks[id] = Task(id: id, key: k, asset: asset, size: size, network: network, priority: priority, callbacks: [token: callback])
       tokens[token] = id
+      armDeadline(id, after: 8)
+    }
+    if let preview = previews.object(forKey: asset.localIdentifier as NSString) {
+      DispatchQueue.main.async { [weak self] in
+        guard self?.tokens[token] != nil else { return }
+        callback(.image(preview, degraded: true))
+      }
     }
     pump()
     return token
   }
+
+  func retry(_ id: String) { cloudFailures.removeValue(forKey: id) }
+
   func cancel(_ token: UUID) {
     guard let id = tokens.removeValue(forKey: token) else { return }
     tasks[id]?.callbacks.removeValue(forKey: token)
-    if let task = tasks[id], task.callbacks.isEmpty {
-      tasks.removeValue(forKey: id)
-      if task.request != PHInvalidImageRequestID { manager.cancelImageRequest(task.request) }
-    }
+    if let task = tasks[id], task.callbacks.isEmpty { remove(task) }
     pump()
   }
-  // Liveness rule: every request termination must reach its callbacks. Views
-  // rely on the cancelled flag to re-arm themselves; silently dropping a
-  // callback leaves that surface black forever (no retry path exists).
-  private func notifyCancelled(_ task: Task) {
-    guard !task.callbacks.isEmpty else { return }
-    cancelled += Double(task.callbacks.count)
-    let callbacks = Array(task.callbacks.values)
+
+  private func remove(_ task: Task) {
+    // Remove identity BEFORE cancelling: a late native callback cannot finish
+    // a replacement request or release the same slot twice.
     tasks.removeValue(forKey: task.id)
     task.callbacks.keys.forEach { tokens.removeValue(forKey: $0) }
+    task.deadline?.cancel()
     if task.request != PHInvalidImageRequestID { manager.cancelImageRequest(task.request) }
-    callbacks.forEach { $0(nil, false, true) }
   }
+
+  private func finish(_ task: Task, delivery: PhotoDelivery) {
+    remove(task)
+    Array(task.callbacks.values).forEach { $0(delivery) }
+  }
+
+  // Every scheduler termination reaches subscribers; explicit unsubscribe is
+  // the only silent cancellation. No single stalled photo can own a slot forever.
+  private func notifyCancelled(_ task: Task) {
+    cancelled += Double(task.callbacks.count)
+    finish(task, delivery: .cancelled)
+  }
+
+  private func fail(_ task: Task, reason: String) {
+    errors += 1
+    if reason.contains("timeout") { timeouts += 1 }
+    if task.cloud && reason != "offline" && task.started > 0 {
+      let now = CACurrentMediaTime()
+      cloudFailures = cloudFailures.filter { now - $0.value < 30 }
+      if cloudFailures.count >= 128, let oldest = cloudFailures.min(by: { $0.value < $1.value })?.key { cloudFailures.removeValue(forKey: oldest) }
+      cloudFailures[task.asset.localIdentifier] = now
+      if cloudFailures.count >= 3 { cloudPauseUntil = now + 20 }
+    }
+    finish(task, delivery: .failure(reason))
+  }
+
+  private func armDeadline(_ id: UUID, after delay: TimeInterval) {
+    tasks[id]?.deadline?.cancel()
+    let epoch = tasks[id]?.epoch
+    let deadlineEpoch = UUID()
+    tasks[id]?.deadlineEpoch = deadlineEpoch
+    let work = DispatchWorkItem { [weak self] in
+      guard let self, let task = self.tasks[id], task.epoch == epoch, task.deadlineEpoch == deadlineEpoch else { return }
+      if task.started == 0 {
+        self.fail(task, reason: "queue-timeout")
+      } else if !task.cloud {
+        self.timeouts += 1
+        self.escalate(task)
+      } else {
+        self.fail(task, reason: "cloud-timeout")
+      }
+      self.pump()
+    }
+    tasks[id]?.deadline = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + max(0.01, delay), execute: work)
+  }
+
+  private func watchNetwork() {
+    guard monitor == nil else { return }
+    let watcher = NWPathMonitor()
+    monitor = watcher
+    watcher.pathUpdateHandler = { [weak self] path in
+      DispatchQueue.main.async {
+        guard let self else { return }
+        let recovered = !self.networkAvailable && path.status == .satisfied
+        self.networkAvailable = path.status == .satisfied
+        if !self.networkAvailable {
+          for task in Array(self.tasks.values) where task.cloud { self.fail(task, reason: "offline") }
+        } else if recovered {
+          self.cloudFailures.removeAll(); self.cloudPauseUntil = 0
+          let now = CACurrentMediaTime()
+          if now - self.lastRecovery >= 3 {
+            self.lastRecovery = now
+            NotificationCenter.default.post(name: Self.availabilityChanged, object: nil)
+          }
+        }
+        self.pump()
+      }
+    }
+    // Passive path observation only, no HTTP reachability probes.
+    watcher.start(queue: DispatchQueue(label: "maoqiu.photo.network"))
+  }
+
+  private func escalate(_ task: Task) {
+    guard task.network else { fail(task, reason: "cloud-required"); return }
+    watchNetwork()
+    guard networkAvailable else { offlineCount += 1; fail(task, reason: "offline"); return }
+    let now = CACurrentMediaTime()
+    if task.priority > 0 && (cloudPauseUntil > now || now - (cloudFailures[task.asset.localIdentifier] ?? -100) < 15) {
+      fail(task, reason: "deferred")
+      return
+    }
+    task.deadline?.cancel()
+    var next = task
+    next.epoch = UUID(); next.request = PHInvalidImageRequestID
+    next.started = 0; next.clock = nil; next.cloud = true
+    tasks[task.id] = next
+    if task.request != PHInvalidImageRequestID { manager.cancelImageRequest(task.request) }
+    armDeadline(task.id, after: 8)
+  }
+
   private func cancelBackground() {
-    // notifyCancelled mutates `tasks`, so iterate over a snapshot.
     for task in Array(tasks.values) where task.priority > 0 { notifyCancelled(task) }
   }
+
   private func pump() {
     guard enabled else { return }
     while true {
-      let running = tasks.values.filter { $0.started > 0 }
+      var running = tasks.values.filter { $0.started > 0 }
+      // A speculative cloud download must yield immediately to the current
+      // photo, even when the byte/pixel budget has not been reached.
+      if tasks.values.contains(where: { $0.started == 0 && $0.cloud && $0.priority == 0 }),
+         let background = running.first(where: { $0.cloud && $0.priority > 0 }) {
+        notifyCancelled(background)
+        running = tasks.values.filter { $0.started > 0 }
+      }
       let maxRunning = limited ? 1 : 3
       guard running.count < maxRunning else { return }
       let pixels = running.reduce(CGFloat(0)) { $0 + $1.size.width * $1.size.height }
@@ -204,32 +331,66 @@ final class PhotoResources: NSObject {
       let waiting = tasks.values.filter { $0.started == 0 }.sorted { $0.priority < $1.priority }
       guard var task = waiting.first(where: {
         ($0.priority == 0 || (!interactive && !limited && running.count < 2)) &&
+        (!$0.cloud || !running.contains(where: { $0.cloud })) &&
         (running.isEmpty || pixels + $0.size.width * $0.size.height <= 24_000_000)
       }) else { return }
+      if task.cloud && !networkAvailable { fail(task, reason: "offline"); continue }
       task.started = CACurrentMediaTime()
+      task.clock = PhotoLoadClock(now: task.started)
+      task.epoch = UUID()
       tasks[task.id] = task
       requests += 1
-      let id = task.id
-      let request = manager.requestImage(for: task.asset, targetSize: task.size, contentMode: .aspectFit, options: options(network: task.network)) { [weak self] image, info in
+      if task.cloud { cloudRequests += 1 }
+      let id = task.id, epoch = task.epoch, cloud = task.cloud
+      let requestOptions = options(network: cloud)
+      if cloud {
+        requestOptions.progressHandler = { [weak self] progress, _, _, _ in
+          DispatchQueue.main.async {
+            guard let self, var current = self.tasks[id], current.epoch == epoch, progress.isFinite else { return }
+            let previous = current.clock!.progress
+            current.clock?.update(progress, now: CACurrentMediaTime())
+            self.tasks[id] = current
+            let deadline = current.clock!.deadline(cloud: true)
+            self.armDeadline(id, after: deadline - CACurrentMediaTime())
+            if Int(current.clock!.progress * 100) > Int(previous * 100) {
+              Array(current.callbacks.values).forEach { $0(.progress(current.clock!.progress)) }
+            }
+          }
+        }
+        DispatchQueue.main.async { [weak self] in
+          guard let current = self?.tasks[id], current.epoch == epoch else { return }
+          Array(current.callbacks.values).forEach { $0(.progress(0)) }
+        }
+      }
+      armDeadline(id, after: task.clock!.deadline(cloud: cloud) - CACurrentMediaTime())
+      let request = manager.requestImage(for: task.asset, targetSize: task.size, contentMode: .aspectFit, options: requestOptions) { [weak self] image, info in
         DispatchQueue.main.async {
-          guard let self, let current = self.tasks[id] else { return }
+          guard let self, let current = self.tasks[id], current.epoch == epoch else { return }
           let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) == true
-          let cancelled = (info?[PHImageCancelledKey] as? Bool) == true
-          if image == nil && !degraded && !cancelled { self.errors += 1 }
-          if let image, !degraded {
+          let wasCancelled = (info?[PHImageCancelledKey] as? Bool) == true
+          let error = info?[PHImageErrorKey] as? NSError
+          if wasCancelled {
+            self.notifyCancelled(current)
+          } else if let image {
             let cost = (image.cgImage?.bytesPerRow ?? Int(image.size.width * 4)) * (image.cgImage?.height ?? Int(image.size.height))
-            self.cache.setObject(image, forKey: current.key as NSString, cost: cost)
-            self.ready += 1; self.loadMs += (CACurrentMediaTime() - current.started) * 1000
+            if degraded {
+              self.previewDeliveries += 1
+              self.previews.setObject(image, forKey: current.asset.localIdentifier as NSString, cost: cost)
+              Array(current.callbacks.values).forEach { $0(.image(image, degraded: true)) }
+            } else {
+              self.cache.setObject(image, forKey: current.key as NSString, cost: cost)
+              self.cloudFailures.removeValue(forKey: current.asset.localIdentifier)
+              self.ready += 1; self.loadMs += (CACurrentMediaTime() - current.started) * 1000
+              self.finish(current, delivery: .image(image, degraded: false))
+              NotificationCenter.default.post(name: Self.contentReady, object: current.asset.localIdentifier)
+            }
+          } else if !degraded || error != nil {
+            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            if status != .authorized && status != .limited { self.fail(current, reason: "permission") }
+            else if !cloud { self.escalate(current) }
+            else { self.fail(current, reason: "cloud-failed") }
           }
-          if !degraded {
-            self.tasks.removeValue(forKey: id)
-            for token in current.callbacks.keys { self.tokens.removeValue(forKey: token) }
-          }
-          current.callbacks.values.forEach { $0(image, degraded, cancelled) }
-          if image != nil && !degraded {
-            NotificationCenter.default.post(name: Self.contentReady, object: current.asset.localIdentifier)
-          }
-          if !degraded { self.pump() }
+          self.pump()
         }
       }
       tasks[id]?.request = request
@@ -294,9 +455,11 @@ final class PhotoResources: NSObject {
     var result: [String: Any] = ["frames": frames, "slowFrames": slowFrames, "maxFrameMs": maxFrameMs, "residentMiB": resident, "sampledPeakMiB": sampledPeakMiB,
                   "memoryCacheHits": hits, "imageRequests": requests, "readyImages": ready, "meanLoadMs": ready > 0 ? loadMs / ready : 0,
                   "errorCount": errors, "cancelledCount": cancelled,
+                  "cloudRequests": cloudRequests, "timeoutCount": timeouts, "previewDeliveries": previewDeliveries, "offlineCount": offlineCount,
                   "activeRequests": Double(tasks.values.filter { $0.started > 0 }.count), "queuedRequests": Double(tasks.values.filter { $0.started == 0 }.count), "constrained": limited ? 1.0 : 0.0]
     for (k, v) in PhotoDiagnostics.shared.drain() { result[k] = v }
     frames = 0; slowFrames = 0; maxFrameMs = 0; hits = 0; requests = 0; ready = 0; loadMs = 0; errors = 0; cancelled = 0
+    cloudRequests = 0; timeouts = 0; previewDeliveries = 0; offlineCount = 0
     return result
   }
 }

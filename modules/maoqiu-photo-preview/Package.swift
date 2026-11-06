@@ -12,7 +12,7 @@ let package = Package(
   name: "MaoqiuPhotoPreview",
   platforms: [.iOS(.v16)],
   targets: [
-    .target(name: "PhotoPreviewCore", path: "ios", sources: ["PhotoContentView.swift"]),
+    .target(name: "PhotoPreviewCore", path: "ios", sources: ["PhotoContentView.swift", "PhotoLoadPolicy.swift"]),
     .testTarget(name: "RenderTests", dependencies: ["PhotoPreviewCore"], path: "Tests"),
   ]
 )
